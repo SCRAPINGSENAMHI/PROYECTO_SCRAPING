@@ -309,6 +309,56 @@ def _resolve_portal_params(row):
     return candidates
 
 
+def _normalize_downloaded_df(df):
+    """Normaliza un DataFrame descargado desde export.php antes de guardarlo.
+
+    Reglas aplicadas:
+    - Trim de strings.
+    - Detecta columnas de precipitación por nombre y convierte marcadores 'T' a 0.0
+      (traza) en esas columnas.
+    - Reemplaza marcadores no numéricos ('T', 'T.', '-') por NaN en columnas
+      que se puedan convertir a numéricas.
+    - Intenta convertir columnas a numéricas cuando al menos 30% de valores
+      pueden convertirse.
+    """
+    import pandas as _pd
+    import numpy as _np
+
+    df2 = df.copy()
+
+    # Strip strings
+    for col in df2.columns:
+        try:
+            df2[col] = df2[col].apply(lambda x: x.strip() if isinstance(x, str) else x)
+        except Exception:
+            continue
+
+    # Detectar columnas de precipitación por nombre
+    precip_cols = [c for c in df2.columns if 'precip' in str(c).lower() or 'precipit' in str(c).lower()]
+
+    # Normalizar marcadores
+    for col in df2.columns:
+        if col in precip_cols:
+            # 'T' -> 0 (traza) para precipitación
+            df2[col] = df2[col].replace({'T': 0, 't': 0, 'T.': 0, 'T\n': 0})
+        else:
+            df2[col] = df2[col].replace({'T': _np.nan, 't': _np.nan, 'T.': _np.nan, 'T\n': _np.nan, '-': _np.nan})
+
+    # Intentar convertir columnas a numéricas si tiene sentido
+    for col in df2.columns:
+        try:
+            # reemplazar comas por puntos en representaciones numéricas
+            series = df2[col].astype(str).str.replace(',', '.').replace({'nan': _pd.NA, 'None': _pd.NA})
+            coerced = _pd.to_numeric(series, errors='coerce')
+            non_null_ratio = coerced.notna().sum() / max(1, len(coerced))
+            if non_null_ratio >= 0.3:
+                df2[col] = coerced
+        except Exception:
+            continue
+
+    return df2
+
+
 def download_station_data(cod, ico, estado, cod_old, from_date, to_date, verbose=True):
     """
     Descarga datos historicos de una estacion desde el portal SENAMHI.
@@ -975,7 +1025,11 @@ def save_station_by_index(df_stations, index, from_date, to_date, output_dir=Non
     )
 
     if df is not None and len(df) > 0:
-        df.to_excel(outpath, index=False)
+        try:
+            df_clean = _normalize_downloaded_df(df)
+        except Exception:
+            df_clean = df
+        df_clean.to_excel(outpath, index=False)
         return outpath
 
     # Si no hay datos, crear un archivo marcador .xlsx con metadatos para dejar rastro
