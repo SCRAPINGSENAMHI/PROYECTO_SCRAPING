@@ -1,0 +1,53 @@
+# ---- Entornos virtuales Python ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Cache Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+
+# ---- Control de versiones ----
+.git/
+.gitignore
+.gitattributes
+
+# ---- Configuracion local / secretos ----
+.env
+.env.*
+*.local
+
+# ---- Outputs del scraper ----
+# Se monta como volumen externo; no debe bakearse en la imagen.
+DATA/outputs/
+
+# ---- Scripts de debug (no necesarios en produccion) ----
+scripts/
+
+# ---- Archivos Excel sueltos en la raiz (outputs temporales) ----
+*.xlsx
+
+# ---- Dockerfile alternativo ----
+Dockerfile.conda
+
+# ---- Archivos de IDE y OS ----
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Node (por si acaso) ----
+node_modules/

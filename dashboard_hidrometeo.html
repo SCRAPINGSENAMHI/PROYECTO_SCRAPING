@@ -1,0 +1,1816 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WEB - SCRAPING ( DATOS HIDROMETEOROLÓGICOS DEL SENAMHI)</title>
+<link href="https://fonts.googleapis.com/css2?family=Unica+One&family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+:root {
+  --bg: #06120a; /* fondo muy oscuro con matiz verde */
+  --panel: #0b1a12; /* paneles oscuros verdosos */
+  --panel2: #0d2418; /* variante para header */
+  --accent: #2f6b46;    /* verde oscuro principal */
+  --accent2: #6aa37f;   /* verde más claro para acentos */
+  --warn: #a46f3f;      /* tono cálido para advertencias */
+  --text: #e6efe8;      /* texto ligeramente verdoso claro */
+  --muted: #9bb29a;     /* texto atenuado */
+  --border: rgba(110,140,110,0.06);
+  --grid: rgba(110,140,110,0.02);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Unica One', 'IBM Plex Mono', monospace;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── HEADER ── */
+header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  backdrop-filter: blur(8px);
+}
+
+.logo {
+  display: flex;
+  flex-direction: column;
+}
+.logo-top {
+  font-family: 'Unica One', 'Syne', sans-serif;
+  font-weight: 900;
+  font-size: 1.6rem; /* más grande para resaltar */
+  letter-spacing: 4px;
+  color: var(--accent2);
+  text-transform: uppercase;
+  line-height: 1;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.65);
+}
+.logo-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  color: var(--accent2);
+}
+.live-dot {
+  width: 8px; height: 8px;
+  background: var(--accent2);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; box-shadow: 0 0 0 0 rgba(0,255,157,0.5); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(0,255,157,0); }
+}
+
+.header-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* ── LAYOUT ── */
+.app {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  grid-template-rows: auto 1fr;
+  flex: 1;
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  grid-row: 1 / 3;
+  background: var(--panel2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sidebar-section {
+  border-bottom: 1px solid var(--border);
+  padding: 20px;
+}
+
+.section-label {
+  font-family: 'Unica One', 'Syne', sans-serif;
+  font-size: 0.6rem;
+  letter-spacing: 4px;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Tab switcher */
+.tab-switcher {
+  display: flex;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+.tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 1.5px;
+  padding: 9px 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+.tab-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.tab-btn:hover:not(.active) {
+  color: var(--accent);
+  background: rgba(47,107,70,0.07);
+}
+
+/* Selection panels */
+.sel-panel { display: none; }
+.sel-panel.active { display: block; }
+
+/* Departamentos grid */
+.dept-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.dept-btn {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Unica One', 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  padding: 9px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  text-align: center;
+  transition: all 0.18s;
+  letter-spacing: 0.5px;
+  line-height: 1.15;
+  font-weight: 400;
+}
+.dept-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(47,107,70,0.07);
+}
+.dept-btn.selected {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* List items (cuencas / zonas) */
+.list-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+  align-items: start;
+}
+.list-item { display:flex; flex-direction:column; align-items:flex-start; }
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: all 0.18s;
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+.list-item:hover {
+  border-color: var(--accent);
+  background: rgba(0,200,255,0.06);
+}
+.list-item.selected {
+  border-color: var(--accent2);
+  background: rgba(0,255,157,0.08);
+  color: var(--accent2);
+}
+.list-item .icon {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+.list-item .name { flex: 1; }
+.list-item .tag {
+  font-size: 0.5rem;
+  background: rgba(255,255,255,0.06);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--muted);
+}
+
+/* Filter chips */
+.filter-area { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.filter-label {
+  font-size: 0.58rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 8px 14px;
+  font-size: 0.74rem;
+  font-weight: 400;
+  cursor: pointer;
+  transition: all 0.18s;
+  color: var(--muted);
+}
+.chip.on { background: rgba(255,159,28,0.15); border-color: var(--warn); color: var(--warn); }
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Apply btn */
+.apply-btn {
+  margin: 16px 20px;
+  width: calc(100% - 40px);
+  padding: 12px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.apply-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent2);
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  z-index: -1;
+}
+.apply-btn:hover { color: var(--bg); }
+.apply-btn:hover::before { transform: translateX(0); }
+
+/* ── TOPBAR ── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+}
+
+.selection-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+.selection-breadcrumb span { color: var(--accent); }
+
+.view-toggle {
+  display: flex;
+  gap: 6px;
+}
+.view-btn {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  width: 32px; height: 32px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.18s;
+}
+.view-btn.active, .view-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── MAIN CONTENT ── */
+.main-content {
+  padding: 20px 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* KPI row removed (cards were present above the map) */
+
+/* Map main row */
+.map-main-row {
+  display: grid;
+  grid-template-columns: 1fr 220px; /* reduced right column to enlarge map */
+  gap: 16px;
+  min-height: 640px; /* increased map height */
+}
+
+.map-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.charts-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Chart panels */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.chart-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  animation: fadeUp 0.5s ease 0.3s both;
+}
+.chart-card.wide { grid-column: 1 / -1; }
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.chart-title {
+  font-family: 'Unica One', 'Syne', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.chart-sub { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+.chart-badge {
+  font-size: 0.55rem;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: rgba(106,163,127,0.08);
+  border: 1px solid rgba(106,163,127,0.12);
+  color: var(--accent2);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* SVG charts */
+.chart-svg-wrap { position: relative; }
+svg.chart { width: 100%; overflow: visible; }
+
+/* Station table */
+.table-wrap {
+  overflow-x: auto;
+}
+table.stations {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6rem;
+}
+table.stations th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+table.stations td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(0,200,255,0.04);
+}
+table.stations tr:hover td { background: rgba(0,200,255,0.04); }
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.s-rt { background: var(--accent2); box-shadow: 0 0 6px var(--accent2); }
+.s-df { background: var(--warn); }
+.s-auto { background: var(--accent); }
+
+.trend-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+  position: relative;
+  width: 60px;
+}
+.trend-bar-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* download button + spinner */
+.download-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.06);
+  color: var(--muted);
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+.download-btn.loading { color: var(--accent2); border-color: var(--accent2); }
+.spinner {
+  display:inline-block; width:14px; height:14px; border-radius:50%; border:2px solid rgba(255,255,255,0.08); border-top-color:var(--accent2); animation:spin 1s linear infinite; margin-left:8px; vertical-align:middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Peru dept paths */
+.dept-path {
+  fill: rgba(47,107,70,0.06);
+  stroke: rgba(47,107,70,0.45);
+  stroke-width: 0.8;
+  cursor: pointer;
+  transition: fill 0.2s;
+}
+.dept-path:hover { fill: rgba(47,107,70,0.12); }
+.dept-path.selected { fill: rgba(47,107,70,0.18); stroke: var(--accent2); stroke-width: 1.5; }
+.dept-label-svg { font-size: 5px; fill: rgba(106,163,127,0.85); pointer-events: none; font-family: 'IBM Plex Mono', monospace; }
+.station-dot { cursor: pointer; }
+.station-dot:hover { opacity: 0.8; }
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 260px 1fr; }
+  .map-main-row { grid-template-columns: 1fr 240px; }
+}
+@media (max-width: 800px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { grid-row: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .map-main-row { grid-template-columns: 1fr; }
+  .charts-right { flex-direction: row; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+<!-- Leaflet JS (will be available to scripts below) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Turf for spatial operations (contains booleanIntersects) -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-top">WEB - SCRAPING ( DATOS HIDROMETEOROLÓGICOS DEL SENAMHI)</div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><span class="live-dot"></span>EN VIVO</div>
+    <div class="header-time" id="clock"></div>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">Área de Análisis</div>
+      <div class="tab-switcher">
+        <button class="tab-btn active" onclick="switchTab('dept', this)">Departamento</button>
+        <button class="tab-btn" onclick="switchTab('cuenca', this)">Cuenca</button>
+        <button class="tab-btn" onclick="switchTab('zona', this)">Sector</button>
+      </div>
+
+      <!-- DEPARTAMENTOS -->
+      <div class="sel-panel active" id="panel-dept">
+        <div class="dept-grid" id="deptGrid"></div>
+        <div id="deptSublist" style="padding-top:12px;"></div>
+      </div>
+
+      <!-- CUENCAS -->
+      <div class="sel-panel" id="panel-cuenca">
+        <div class="list-items" id="cuencaList"></div>
+      </div>
+
+      <!-- SECTORES CLIMÁTICOS -->
+      <div class="sel-panel" id="panel-zona">
+        <div class="list-items" id="zonaList"></div>
+      </div>
+    </div>
+
+    <div class="filter-area">
+      <div class="filter-label">Tipo de Estación</div>
+      <div class="chips">
+        <div class="chip on" onclick="toggleChip(this)">Convencional T.Real</div>
+        <div class="chip on" onclick="toggleChip(this)">Convencional Diferido</div>
+        <div class="chip on" onclick="toggleChip(this)">Automática</div>
+      </div>
+    </div>
+
+    <div class="filter-area">
+      <div class="filter-label">Período</div>
+      <div class="chips">
+        <div class="chip on" onclick="singleChip(this, 'periodo')">Hoy</div>
+        <div class="chip" onclick="singleChip(this, 'periodo')">7 días</div>
+        <div class="chip" onclick="singleChip(this, 'periodo')">30 días</div>
+        <div class="chip" onclick="singleChip(this, 'periodo')">Año</div>
+      </div>
+    </div>
+
+    <div class="filter-area">
+      <div class="filter-label">Rango para descargar</div>
+      <div style="display:flex;gap:8px;align-items:center;padding-top:6px">
+        <input id="downloadFrom" type="date" style="padding:8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text)" value="2015-06-11">
+        <input id="downloadTo" type="date" style="padding:8px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text)" value="2026-02-21">
+      </div>
+      <div style="font-size:0.68rem;color:var(--muted);margin-top:8px">Selecciona el rango que se usará al pulsar "Descargar historial" en la tabla.</div>
+    </div>
+
+    <div class="filter-area">
+      <div class="filter-label">Variable</div>
+      <div class="chips">
+        <div class="chip on" onclick="singleChip(this, 'var')">Precipitación</div>
+        <div class="chip" onclick="singleChip(this, 'var')">Temperatura</div>
+        <div class="chip" onclick="singleChip(this, 'var')">Caudal</div>
+        <div class="chip" onclick="singleChip(this, 'var')">Humedad</div>
+        <div class="chip" onclick="singleChip(this, 'var')">Viento</div>
+      </div>
+    </div>
+
+    <button class="apply-btn" onclick="applyFilters()">▶ Aplicar Filtros</button>
+
+  </aside>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div style="display:flex; flex-direction:column;">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="selection-breadcrumb" id="breadcrumb">
+        PERÚ &rsaquo; <span id="bc-area">TODOS LOS DEPARTAMENTOS</span> &rsaquo; <span id="bc-var">PRECIPITACIÓN</span>
+      </div>
+      <div class="view-toggle">
+        <button class="view-btn active" title="Dashboard">⬛</button>
+        <button class="view-btn" title="Tabla">☰</button>
+        <button class="view-btn" title="Mapa">🗺</button>
+      </div>
+      <div style="margin-left:12px">
+        <button class="apply-btn" id="downloadMaestraBtn" onclick="processAllFromMaestra()">Descargar Maestra</button>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main-content">
+
+      <!-- KPIs removed -->
+
+      <!-- MAP + RIGHT CHARTS -->
+      <div class="map-main-row">
+
+        <!-- INTERACTIVE PERU MAP -->
+        <div class="chart-card map-panel">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Mapa de Estaciones – Perú</div>
+              <div class="chart-sub">Haz clic en un departamento para seleccionarlo</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <!-- Leyenda de colores de marcadores -->
+              <span style="font-size:0.55rem;color:var(--muted);display:flex;gap:10px;align-items:center">
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6aa37f;margin-right:4px;vertical-align:middle"></span>Conv. Activa</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4da6ff;margin-right:4px;vertical-align:middle"></span>Auto. Activa</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#888888;margin-right:4px;vertical-align:middle"></span>Inactiva</span>
+              </span>
+              <div class="chart-badge" id="map-dept-label">PERÚ COMPLETO</div>
+            </div>
+          </div>
+          <div id="peru-map-wrap" style="position:relative;flex:1;min-height:420px;">
+            <div id="leafletMap" style="width:100%;height:100%;display:block;border-radius:6px;overflow:hidden"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: bar + line stacked -->
+        <div class="charts-right">
+          <div class="chart-card">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Precipitación Diaria</div>
+                <div class="chart-sub" id="chart-sub-prec">Últimos 14 días · área seleccionada</div>
+              </div>
+              <div class="chart-badge">mm</div>
+            </div>
+            <div class="chart-svg-wrap">
+              <svg class="chart" height="130" id="barChart" viewBox="0 0 320 130"></svg>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <div class="chart-header">
+              <div>
+                <div class="chart-title">Serie Temporal</div>
+                <div class="chart-sub" id="chart-sub-ts">Promedio mensual · 12 meses</div>
+              </div>
+              <div class="chart-badge">Tiempo Real</div>
+            </div>
+            <div class="chart-svg-wrap">
+              <svg class="chart" height="130" id="lineChart" viewBox="0 0 320 130"></svg>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Station table -->
+      <div class="chart-card wide">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Estaciones en Área Seleccionada</div>
+            <div class="chart-sub">Datos del último reporte · 07h / 13h / 19h</div>
+          </div>
+          <div class="chart-badge" id="est-count-badge">-- Estaciones</div>
+        </div>
+        <div class="table-wrap">
+          <table class="stations">
+            <thead>
+              <tr>
+                <th>Estación</th>
+                <th>Tipo</th>
+                <th>Departamento</th>
+                <th>Cuenca</th>
+                <th>Precip. (mm)</th>
+                <th>Temp. (°C)</th>
+                <th>Actividad</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────
+const DEPTS = [
+  'AMAZONAS','ÁNCASH','APURÍMAC','AREQUIPA','AYACUCHO','CAJAMARCA',
+  'CALLAO','CUSCO','HUANCAVELICA','HUÁNUCO','ICA','JUNÍN',
+  'LA LIBERTAD','LAMBAYEQUE','LIMA','LORETO','MADRE DE DIOS',
+  'MOQUEGUA','PASCO','PIURA','PUNO','SAN MARTÍN','TACNA','TUMBES','UCAYALI'
+];
+
+// CUENCAS: will be loaded dynamically from the server (shapefile DATA/CUENCAS/UH.shp)
+let CUENCAS = [];
+
+const ZONAS = [
+  { name: 'Costa Norte', icon: '☀', tag: 'Árido' },
+  { name: 'Costa Centro', icon: '☁', tag: 'Semi-árido' },
+  { name: 'Costa Sur', icon: '🌵', tag: 'Árido' },
+  { name: 'Sierra Norte', icon: '⛰', tag: 'Subtropical' },
+  { name: 'Sierra Centro', icon: '⛰', tag: 'Templado' },
+  { name: 'Sierra Sur', icon: '⛰', tag: 'Frío' },
+  { name: 'Selva Alta', icon: '🌿', tag: 'Tropical' },
+  { name: 'Selva Baja', icon: '🌴', tag: 'Tropical' },
+  { name: 'Altiplano', icon: '🏔', tag: 'Frío seco' },
+  { name: 'Desierto Costero', icon: '🏜', tag: 'Hiper-árido' },
+];
+
+let STATIONS_POOL = [];
+let OUTPUT_FILES = [];
+
+// Cargar estaciones desde la API local (server.py)
+fetch('/api/stations')
+  .then(r => r.json())
+  .then(data => {
+    if (Array.isArray(data) && data.length) {
+      console.log('api/stations: received', data.length, 'records');
+      // normalizar lat/lon desde LATITUD / LONGITUD (mayúsculas) u otras variantes
+      STATIONS_POOL = data.map(s => {
+        const name = s.name || s.NOMBRE_ESTACION || s.nombre || 'ND';
+        // Detectar tipo: buscar columnas explícitas como `CONVENCIONAL` o `AUTOMATICA` (case-insensitive)
+        const objKeys = Object.keys(s || {});
+        const hasNonEmpty = (k) => { try { return s[k] !== undefined && s[k] !== null && String(s[k]).trim() !== ''; } catch(e){ return false; } };
+        const normKey = k => String(k || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const convKey = objKeys.find(k => normKey(k).includes('convencional') || normKey(k) === 'conv' || normKey(k).startsWith('conv'));
+        const autoKey = objKeys.find(k => normKey(k).includes('automatica') || normKey(k).includes('auto'));
+        const hasConv = !!(convKey && hasNonEmpty(convKey));
+        const hasAuto = !!(autoKey && hasNonEmpty(autoKey));
+        // Regla: si la columna CONVENCIONAL tiene información => Convencional; en caso contrario => Automática
+        let tipo = 'Automática';
+        if (hasConv) tipo = 'Convencional';
+        else if (hasAuto) tipo = 'Automática';
+        else if (s.tipo) tipo = s.tipo;
+        else if (s.TYPE) tipo = s.TYPE;
+        const dept = s.dept || s.departamento || s.DEPARTAMENTO || 'ND';
+        const cuenca = s.cuenca || s.CUENCA || 'ND';
+        const prec = Number(s.prec || s.PRECIP || 0) || 0;
+        const temp = Number(s.temp || s.TEMP || 0) || 0;
+        const act = Number(s.act || s.activity || 80) || 80;
+        // Campos que me indicas: LATITUD y LONGITUD
+        const rawLat = s.lat ?? s.LATITUD ?? s.Latitud ?? s.LAT ?? s.latitude ?? s.Y ?? null;
+        const rawLon = s.lon ?? s.LONGITUD ?? s.Longitud ?? s.LON ?? s.longitude ?? s.X ?? null;
+        // Normalizar decimales con coma y valores no numéricos
+        function parseCoord(v){
+          if (v === null || v === undefined) return null;
+          const str = String(v).trim();
+          if (str === '') return null;
+          // cambiar coma decimal a punto
+          const cleaned = str.replace(/,/g, '.');
+          const num = parseFloat(cleaned);
+          return Number.isFinite(num) ? num : null;
+        }
+        const lat = parseCoord(rawLat);
+        const lon = parseCoord(rawLon);
+        const codVal = s.cod || s.COD || s.codigo || s.Codigo || s.CODIGO || null;
+        // Estado operativo: viene del campo ESTADO del Excel via server.py
+        const estadoOp = s.estado_operativo || s.ESTADO || 'DESCONOCIDO';
+        // ico: campo del portal SENAMHI ('M' o 'H') — viene de server.py si la lista remota lo tiene
+        const icoVal = s.ico || s.ICO || null;
+        return { name, tipo, estadoOp, dept, cuenca, prec, temp, act, lat, lon, cod: codVal, ico: icoVal, raw: {rawLat, rawLon} };
+      });
+      console.log('STATIONS_POOL sample', STATIONS_POOL.slice(0,3));
+    } else {
+      // fallback: keep small simulated pool with coords
+      STATIONS_POOL = [
+        {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88, lat:-12.0464, lon:-77.0428},
+        {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91, lat:-13.5176, lon:-71.9780}
+      ];
+    }
+
+    // Plotea estaciones en el mapa primero (evita errores si KPIs fueron eliminadas)
+    if (typeof initLeaflet === 'function') initLeaflet();
+    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+    // fetch known saved outputs and mark stations accordingly
+    fetch('/api/outputs').then(r=>r.json()).then(files=>{
+      OUTPUT_FILES = Array.isArray(files)?files:[];
+      // normalize filenames to lower for matching
+      const normFiles = OUTPUT_FILES.map(f=> ({...f, _n: String(f.name||'').toLowerCase()}));
+      STATIONS_POOL.forEach(s=>{
+        try{
+          const nm = String(s.name||'').toLowerCase().replace(/\s+/g,'_');
+          const match = normFiles.find(f=> f._n.indexOf(nm) !== -1 || nm.indexOf(f._n) !== -1 || (String(s.cod||'') && f._n.indexOf(String(s.cod||'').toLowerCase()) !== -1));
+          if (match){ s._saved_path = match.path; s._saved_name = match.name; }
+        }catch(e){}
+      });
+      // re-render table to show saved links
+      try{ renderTable(selectedArea || 'TODOS'); }catch(e){/*ignore*/}
+    }).catch(e=>console.warn('No outputs list available', e));
+    // Luego renderiza tabla y KPIs si las funciones existen
+    try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
+    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+  })
+  .catch(err => {
+    console.warn('No se pudo obtener estaciones desde API:', err);
+    STATIONS_POOL = [
+      {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88},
+      {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91}
+    ];
+    if (typeof initLeaflet === 'function') initLeaflet();
+    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+    try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
+    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+  });
+
+// ── STATE ──
+let selectedArea = null;
+let selectedAreaType = 'dept';
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleString('es-PE', { hour:'2-digit', minute:'2-digit', second:'2-digit', day:'2-digit', month:'short', year:'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── BUILD SIDEBAR ──
+function buildDeptGrid() {
+  const grid = document.getElementById('deptGrid');
+  DEPTS.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'dept-btn';
+    btn.textContent = d;
+    btn.onclick = () => selectItem(btn, d, 'dept', grid.querySelectorAll('.dept-btn'));
+    grid.appendChild(btn);
+  });
+}
+
+// Render cuencas as buttons en grid de 3 columnas fijas
+function buildCuencaGrid(containerId, items){
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  // 3 columnas fijas — cumple requerimiento TAREA 3
+  grid.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  grid.style.gap = '6px';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'dept-btn';
+    // Layout compacto para caber en 3 columnas: solo nombre, sin icono grande
+    btn.style.fontSize = '0.7rem';
+    btn.style.padding = '7px 5px';
+    btn.style.lineHeight = '1.2';
+    btn.style.textAlign = 'center';
+    btn.title = item.name; // tooltip con nombre completo al hacer hover
+    btn.textContent = item.name;
+    btn.onclick = () => selectItem(btn, item.name, 'cuenca', grid.querySelectorAll('.dept-btn'));
+    grid.appendChild(btn);
+  });
+  container.appendChild(grid);
+}
+
+function buildList(containerId, items, type) {
+  const container = document.getElementById(containerId);
+  items.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'list-item';
+    div.innerHTML = `<span class="icon">${item.icon}</span><span class="name">${item.name}</span><span class="tag">${item.tag}</span>`;
+    div.onclick = () => selectItem(div, item.name, type, container.querySelectorAll('.list-item'));
+    container.appendChild(div);
+  });
+}
+
+function selectItem(el, name, type, peers) {
+  peers.forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedArea = name;
+  selectedAreaType = type;
+  // Mostrar la capa correspondiente en el mapa si existe
+  if (type === 'dept') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
+    // tambien mostrar cuencas que intersectan la region seleccionada
+    try { showCuencasInDept(name); } catch(e){ console.warn('showCuencasInDept error', e); }
+  } else if (type === 'cuenca') {
+    // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas', name);
+  } else if (type === 'zona') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores', name);
+  }
+  // Filtrar y renderizar tabla + marcadores segun area seleccionada
+  try { renderTable(selectedArea); } catch(e){ console.warn('renderTable error', e); }
+  // Actualizar breadcrumb
+  try {
+    document.getElementById('bc-area').textContent = name;
+    document.getElementById('map-dept-label').textContent = name.toUpperCase();
+  } catch(e){}
+}
+
+buildDeptGrid();
+// build static lists for departamentos and zonas; cuencas come from the shapefile
+// Attempt to load cuencas from server so we display all features from UH.shp
+// BUG CORREGIDO: el shapefile UH.shp tiene los campos:
+//   NOMBRE     -> nombre individual de cada cuenca (231 cuencas unicas)
+//   NOMB_UH_N1 -> region hidrografica (solo 3 valores: Pacifico, Amazonas, Titicaca)
+// El codigo anterior buscaba la primera key con 'nomb' y encontraba NOMB_UH_N1 (orden
+// alfabetico en el shapefile), mostrando solo 3 regiones en vez de 231 cuencas.
+// Ahora se prioriza explicitamente el campo 'NOMBRE' antes de buscar por patron.
+function _getCuencaName(properties) {
+  if (!properties) return null;
+  // 1) Prioridad absoluta: campo exacto 'NOMBRE' (nombre individual de la cuenca)
+  if (properties['NOMBRE'] !== undefined && properties['NOMBRE'] !== null && String(properties['NOMBRE']).trim() !== '') {
+    return String(properties['NOMBRE']).trim();
+  }
+  // 2) Variantes de nombre exacto
+  for (const exact of ['nombre', 'Name', 'name', 'CUENCA', 'cuenca']) {
+    if (properties[exact] !== undefined && properties[exact] !== null && String(properties[exact]).trim() !== '') {
+      return String(properties[exact]).trim();
+    }
+  }
+  // 3) Fallback: buscar por patron pero EXCLUIR campos que son nombres de region (NOMB_UH_N1..N7)
+  //    para no agrupar cuencas en solo 3 regiones
+  const keys = Object.keys(properties);
+  for (const k of keys) {
+    const lk = String(k).toLowerCase();
+    // Excluir campos de nivel jerarquico (NOMB_UH_N1 a N7 son regiones, no cuencas individuales)
+    if (/nomb_uh_n\d/.test(lk)) continue;
+    if (lk === 'nombre' || lk === 'name' || lk === 'cuenca') {
+      const v = properties[k];
+      if (v !== null && String(v).trim() !== '') return String(v).trim();
+    }
+  }
+  return null;
+}
+
+function fetchCuencasList(){
+  const container = document.getElementById('cuencaList');
+  container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">Cargando cuencas...</div>';
+  fetch('/api/geojson?layer=cuencas').then(r => r.json()).then(geo => {
+    const names = new Set();
+    if (geo && Array.isArray(geo.features)){
+      geo.features.forEach(f => {
+        if (!f || !f.properties) return;
+        const found = _getCuencaName(f.properties);
+        if (found) names.add(found);
+      });
+    }
+    // create array sorted alphabetically
+    CUENCAS = Array.from(names).sort((a,b)=> a.localeCompare(b, 'es'))
+      .map(n => ({ name: n, icon: '🌊', tag: '' }));
+    container.innerHTML = '';
+    if (CUENCAS.length === 0){
+      container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">No se encontraron cuencas en el shapefile.</div>';
+      return;
+    }
+    buildCuencaGrid('cuencaList', CUENCAS);
+    console.log('fetchCuencasList: cargadas', CUENCAS.length, 'cuencas individuales');
+  }).catch(err => {
+    console.warn('Error cargando cuencas:', err);
+    container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">Error al cargar cuencas.</div>';
+  });
+}
+
+// load cuencas on start
+fetchCuencasList();
+buildList('zonaList', ZONAS, 'zona');
+
+// ── TABS ──
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.sel-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  selectedAreaType = id;
+  selectedArea = null;
+  document.querySelectorAll('.dept-btn, .list-item').forEach(el => el.classList.remove('selected'));
+
+  // Mostrar la capa completa correspondiente al tab seleccionado
+  if (id === 'dept') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos');
+    document.getElementById('map-dept-label').textContent = 'TODOS LOS DEPARTAMENTOS';
+  } else if (id === 'cuenca') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas');
+    document.getElementById('map-dept-label').textContent = 'TODAS LAS CUENCAS';
+  } else if (id === 'zona') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores');
+    document.getElementById('map-dept-label').textContent = 'TODOS LOS SECTORES CLIMÁTICOS';
+  }
+}
+
+// ── CHIPS ──
+function toggleChip(el) { el.classList.toggle('on'); }
+function singleChip(el, group) {
+  el.closest('.chips').querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+}
+
+// ── APPLY FILTERS ──
+function applyFilters() {
+  const areaLabel = selectedArea ||
+    (selectedAreaType === 'dept' ? 'TODOS LOS DEPARTAMENTOS' :
+     selectedAreaType === 'cuenca' ? 'TODAS LAS CUENCAS' : 'TODOS LOS SECTORES');
+
+  const varEl = document.querySelector('.chips .chip.on[onclick*="var"]') ||
+                document.querySelector('#varChips .chip.on');
+  // pick from active var chip
+  const activeVar = [...document.querySelectorAll('.chips .chip.on')]
+    .find(c => ['Precipitación','Temperatura','Caudal','Humedad','Viento'].includes(c.textContent));
+  const varLabel = activeVar ? activeVar.textContent.toUpperCase() : 'PRECIPITACIÓN';
+
+  document.getElementById('bc-area').textContent = areaLabel;
+  document.getElementById('bc-var').textContent = varLabel;
+
+  updateKPIs(areaLabel);
+  renderBarChart();
+  renderLineChart();
+  renderTable(areaLabel);
+}
+
+function rnd(min, max, dec=1) { return +(Math.random()*(max-min)+min).toFixed(dec); }
+
+function updateKPIs(area) {
+  const prec = rnd(0, 80);
+  const temp = rnd(8, 34);
+  const caudal = rnd(50, 2000, 0);
+  const total = rnd(40, 120, 0);
+  const active = Math.floor(total * rnd(0.7, 1.0));
+
+  animVal('kpi-prec', 0, prec, 1);
+  animVal('kpi-temp', 0, temp, 1);
+  animVal('kpi-caudal', 0, caudal, 0);
+  animVal('kpi-est', 0, active, 0);
+  document.getElementById('kpi-est-total').textContent = total;
+
+  const up = Math.random() > 0.4;
+  document.getElementById('kpi-prec-d').textContent = (up ? '↑ +' : '↓ -') + rnd(1,20) + '% vs. período anterior';
+  document.getElementById('kpi-prec-d').className = 'kpi-delta ' + (up ? 'up' : 'down');
+  document.getElementById('kpi-temp-d').textContent = '↑ +' + rnd(0,3) + '°C vs. normal';
+  document.getElementById('kpi-caudal-d').textContent = (Math.random()>0.5?'↑':'↓') + ' ' + rnd(0,15) + '% vs. ayer';
+  document.getElementById('kpi-est-d').textContent = (active/total*100).toFixed(0) + '% operatividad';
+  document.getElementById('est-count-badge').textContent = active + ' Estaciones';
+}
+
+function animVal(id, from, to, dec) {
+  const el = document.getElementById(id);
+  const steps = 30, dur = 600;
+  let step = 0;
+  const iv = setInterval(() => {
+    step++;
+    const v = from + (to - from) * (step/steps);
+    el.textContent = v.toFixed(dec);
+    if (step >= steps) { el.textContent = to.toFixed(dec); clearInterval(iv); }
+  }, dur/steps);
+}
+
+// ── BAR CHART ──
+function renderBarChart() {
+  const svg = document.getElementById('barChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:10,b:30};
+  const vals = Array.from({length:14}, () => rnd(0, 40));
+  const max = Math.max(...vals, 1);
+  const bw = (W - pad.l - pad.r) / vals.length;
+
+  let html = `<line x1="${pad.l}" y1="${H-pad.b}" x2="${W-pad.r}" y2="${H-pad.b}" stroke="rgba(47,107,70,0.15)" stroke-width="1"/>`;
+  [0.25,0.5,0.75,1].forEach(f => {
+    const y = pad.t + (H - pad.t - pad.b) * (1 - f);
+    html += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="rgba(47,107,70,0.06)" stroke-width="1"/>`;
+    html += `<text x="${pad.l-4}" y="${y+3}" fill="#9bb29a" font-size="7" text-anchor="end">${(max*f).toFixed(0)}</text>`;
+  });
+
+  vals.forEach((v, i) => {
+    const x = pad.l + i * bw + 2;
+    const bh = (v / max) * (H - pad.t - pad.b);
+    const y = H - pad.b - bh;
+    const alpha = 0.4 + 0.6*(v/max);
+    html += `<rect x="${x}" y="${y}" width="${bw-4}" height="${bh}"
+      fill="rgba(47,107,70,${alpha})" rx="2">
+      <animate attributeName="height" from="0" to="${bh}" dur="0.5s" fill="freeze"/>
+      <animate attributeName="y" from="${H-pad.b}" to="${y}" dur="0.5s" fill="freeze"/>
+    </rect>`;
+    if (i % 2 === 0) {
+      const d = new Date(); d.setDate(d.getDate() - (13 - i));
+      html += `<text x="${x + (bw-4)/2}" y="${H-pad.b+12}" fill="#5a7a99" font-size="6.5" text-anchor="middle">${d.getDate()}/${d.getMonth()+1}</text>`;
+    }
+  });
+
+  svg.innerHTML = html;
+}
+
+// ── LINE CHART ──
+function renderLineChart() {
+  const svg = document.getElementById('lineChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:12,b:28};
+  const months = ['Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic','Ene'];
+  const vals = months.map(() => rnd(5, 90));
+  const max = Math.max(...vals);
+
+  const pts = vals.map((v, i) => {
+    const x = pad.l + i * ((W - pad.l - pad.r) / (vals.length - 1));
+    const y = pad.t + (H - pad.t - pad.b) * (1 - v/max);
+    return [x, y];
+  });
+
+  const pathD = pts.map((p, i) => (i===0?'M':'L') + p[0] + ' ' + p[1]).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0]} ${H-pad.b} L${pts[0][0]} ${H-pad.b} Z`;
+
+  let html = `<defs>
+    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6aa37f" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#2f6b46" stop-opacity="0"/>
+    </linearGradient>
+  </defs>`;
+
+  html += `<path d="${areaD}" fill="url(#areaGrad)"/>`;
+  html += `<path d="${pathD}" fill="none" stroke="#2f6b46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  pts.forEach(([x,y],i) => {
+    html += `<circle cx="${x}" cy="${y}" r="3.5" fill="#06120a" stroke="#2f6b46" stroke-width="1.5"/>`;
+    html += `<text x="${x}" y="${H-pad.b+14}" fill="#9bb29a" font-size="7.5" text-anchor="middle">${months[i]}</text>`;
+  });
+
+  [0.25,0.5,0.75,1].forEach(f => {
+    const y = pad.t + (H - pad.t - pad.b)*(1-f);
+    html += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="rgba(47,107,70,0.05)" stroke-width="1"/>`;
+    html += `<text x="${pad.l-4}" y="${y+3}" fill="#9bb29a" font-size="7" text-anchor="end">${(max*f).toFixed(0)}</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+// ── TABLE ──
+function renderTable(area) {
+  const tbody = document.getElementById('tableBody');
+  const norm = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim(); } catch(e) { return String(x||'').toLowerCase().trim(); } };
+  let filtered = STATIONS_POOL.slice();
+  if (area && area !== 'TODOS' && area !== 'TODAS LAS CUENCAS' && area !== 'TODOS LOS DEPARTAMENTOS'){
+    const tgt = norm(area);
+    if (selectedAreaType === 'dept'){
+      filtered = filtered.filter(s => s && s.dept && norm(s.dept) === tgt);
+    } else if (selectedAreaType === 'cuenca'){
+      // BUG CORREGIDO: el shapefile tiene nombres como "Cuenca Alamor" / "Intercuenca Alto Yurua"
+      // pero la Maestra de estaciones tiene "Alamor" / "Alto Yurua" en UNIDAD_HIDROGRAFICA.
+      // Se usa matching bidireccional: el nombre del shapefile contiene el de la estacion O viceversa.
+      filtered = filtered.filter(s => {
+        if (!s || !s.cuenca) return false;
+        const sc = norm(s.cuenca);
+        // Coincidencia exacta
+        if (sc === tgt) return true;
+        // El nombre del shapefile contiene el nombre de la estacion (ej: "cuenca alamor" contiene "alamor")
+        if (tgt.includes(sc) && sc.length > 3) return true;
+        // El nombre de la estacion contiene el del shapefile
+        if (sc.includes(tgt) && tgt.length > 3) return true;
+        return false;
+      });
+    } else if (selectedAreaType === 'zona'){
+      // zona matching: try to match zona name in station properties if present
+      filtered = filtered.filter(s => s && (norm(s.cuenca||'').includes(tgt) || norm(s.dept||'').includes(tgt)));
+    }
+  }
+
+  // update map markers to show only filtered stations
+  try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(filtered); } catch(e){ console.warn('plotStationsOnMap error', e); }
+
+  tbody.innerHTML = filtered.map(s => {
+    // Color del dot de tipo segun tipo de estacion
+    const tipoNormTbl = (s.tipo||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    const typeClass = tipoNormTbl.includes('conv') ? 's-rt' : 's-auto';
+    const prec = (typeof s.prec === 'number') ? s.prec.toFixed(1) : (s.prec?String(s.prec):'0');
+    const temp = (typeof s.temp === 'number') ? s.temp.toFixed(1) : (s.temp?String(s.temp):'0');
+    const act = (typeof s.act === 'number') ? s.act : (s.act?Number(s.act):80);
+    const escaped = (s.name||'').replace(/'/g,"\\'");
+    const hasCoords = (s.lat != null && s.lon != null);
+    const viewBtn = hasCoords ? `<button class="view-btn" title="Ver en mapa" onclick="focusStationOnMap('${escaped}')">&#x1F5FA;</button>` : `<span style="font-size:0.78rem;color:var(--muted)">Sin coords</span>`;
+    const savedHtml = s._saved_path ? `<button class="view-saved-btn" onclick="previewSavedData('${escaped}')" style="background:none;border:0;color:var(--accent2);font-weight:600;cursor:pointer">Descargado</button>` : '';
+    // Color y texto del estado operativo
+    const estadoOp = s.estadoOp || 'DESCONOCIDO';
+    let estadoColor, estadoLabel;
+    if (estadoOp === 'OPERATIVA') {
+      estadoColor = 'var(--accent2)'; estadoLabel = 'OPERATIVA';
+    } else if (estadoOp === 'PARCIAL') {
+      estadoColor = 'var(--warn)'; estadoLabel = 'PARCIAL';
+    } else if (estadoOp === 'INACTIVA') {
+      estadoColor = '#888888'; estadoLabel = 'INACTIVA';
+    } else {
+      estadoColor = 'var(--muted)'; estadoLabel = estadoOp;
+    }
+    return `<tr>
+      <td style="color:var(--text);font-weight:500">${s.name || ''}</td>
+      <td><span class="status-dot ${typeClass}"></span>${s.tipo || ''}</td>
+      <td style="color:var(--muted)">${s.dept || ''}</td>
+      <td style="color:var(--muted)">${s.cuenca || ''}</td>
+      <td style="color:var(--accent)">${prec}</td>
+      <td style="color:var(--warn)">${temp}</td>
+      <td>
+        <div class="trend-bar"><div class="trend-bar-fill" style="width:${act}%"></div></div>
+      </td>
+      <td style="color:${estadoColor};font-size:0.58rem;font-weight:600">&#9679; ${estadoLabel}</td>
+      <td style="display:flex;gap:8px;align-items:center">${viewBtn}${ savedHtml || `<button class="download-btn" onclick="downloadStation('${escaped}', this)">Descargar historial</button>` }<span class="dl-status" style="margin-left:6px"></span></td>
+    </tr>`;
+  }).join('');
+}
+
+// Preview saved output and optionally use it in dashboard
+function previewSavedData(stationName){
+  if (!stationName) return;
+  const modal = buildPreviewModal();
+  modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Cargando preview...</div>';
+  modal.show();
+  fetch('/api/output_preview?station='+encodeURIComponent(stationName)).then(r=>r.json()).then(j=>{
+    if (!j || !j.found){ modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">No se encontró archivo guardado.</div>'; return; }
+    const lines = [];
+    lines.push(`<div style="font-weight:700;margin-bottom:6px">${j.file}</div>`);
+    lines.push(`<div style="font-size:0.9rem;color:var(--muted)">Filas: ${j.rows} · Columnas: ${j.columns.length} ${j.date_min?('· Fecha: '+j.date_min+' → '+j.date_max):''}</div>`);
+    if (j.monthly && Array.isArray(j.monthly) && j.monthly.length){
+      lines.push('<div style="margin-top:8px;font-weight:600">Serie mensual (muestra)</div>');
+      const mm = j.monthly.slice(-12).map(m=> `<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">${m.period}</span><span>${m.value!==null?m.value.toFixed(2):'-'}</span></div>`).join('');
+      lines.push(`<div style="max-height:220px;overflow:auto;margin-top:6px">${mm}</div>`);
+    }
+    if (j.sample && j.sample.length){
+      const tbl = ['<table style="width:100%;border-collapse:collapse;margin-top:8px">'];
+      tbl.push('<thead><tr>' + j.columns.slice(0,6).map(c=>`<th style="text-align:left;padding:6px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.78rem;color:var(--muted)">${c}</th>`).join('') + '</tr></thead>');
+      tbl.push('<tbody>');
+      j.sample.forEach(r=>{ tbl.push('<tr>' + j.columns.slice(0,6).map(c=>`<td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.02);font-size:0.82rem">${String(r[c]||'')}</td>`).join('') + '</tr>'); });
+      tbl.push('</tbody></table>');
+      lines.push(tbl.join(''));
+    }
+    modal.querySelector('.modal-body').innerHTML = lines.join('');
+    const footer = modal.querySelector('.modal-footer'); footer.innerHTML = '';
+    const useBtn = document.createElement('button'); useBtn.className='apply-btn'; useBtn.textContent='Usar en dashboard';
+    useBtn.onclick = ()=>{ modal.hide(); applySavedToDashboard(j); };
+    footer.appendChild(useBtn);
+    const dl = document.createElement('a'); dl.href = '/'+ String(j.path).replace(/\\/g,'/'); dl.target='_blank'; dl.textContent='Abrir fichero'; dl.style.marginLeft='8px'; dl.style.color='var(--muted)'; footer.appendChild(dl);
+  }).catch(err=>{ modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Error al cargar preview.</div>'; console.warn(err); });
+}
+
+function applySavedToDashboard(preview){
+  // store current saved data summary and monthly series
+  window.CURRENT_SAVED = preview || null;
+  // update KPIs using sample stats if available
+  if (preview && preview.monthly && preview.monthly.length){
+    const vals = preview.monthly.map(m=>m.value).filter(v=>v!=null);
+    const prec = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+    animVal('kpi-prec', 0, prec, 1);
+    animVal('kpi-temp', 0, prec/3, 1);
+    animVal('kpi-caudal', 0, prec*10, 0);
+    animVal('kpi-est', 0, Math.min(120, Math.round((preview.rows/10)||50)), 0);
+    document.getElementById('kpi-est-total').textContent = Math.max(1, Math.round(preview.rows/10));
+    document.getElementById('kpi-prec-d').textContent = 'Datos cargados desde archivo';
+  }
+  // update charts to show monthly if present
+  try{ renderBarChartWithData(preview && preview.monthly ? preview.monthly.slice(-14) : null); }catch(e){ console.warn(e); }
+  try{ renderLineChartWithData(preview && preview.monthly ? preview.monthly.slice(-12) : null); }catch(e){ console.warn(e); }
+}
+
+function buildPreviewModal(){
+  let modal = document.getElementById('savedPreviewModal');
+  if (!modal){
+    modal = document.createElement('div'); modal.id='savedPreviewModal'; modal.className='modal';
+    modal.innerHTML = `<div class="modal-box" style="width:720px;max-width:96%"><div class="modal-header" style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700">Preview guardado</div><button class="close-modal">✕</button></div><div class="modal-body" style="padding:12px"></div><div class="modal-footer" style="padding:12px;display:flex;justify-content:flex-end;gap:8px"></div></div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.close-modal').onclick = ()=>modal.hide();
+    modal.show = function(){ this.style.display='block'; this.style.position='fixed'; this.style.left=0; this.style.top=0; this.style.right=0; this.style.bottom=0; this.style.background='rgba(0,0,0,0.6)'; this.querySelector('.modal-box').style.margin='6% auto'; };
+    modal.hide = function(){ this.style.display='none'; };
+    modal.style.display='none';
+  }
+  return modal;
+}
+
+// chart renderers that accept data
+function renderBarChartWithData(monthly){
+  if (!monthly || !monthly.length) return renderBarChart();
+  const svg = document.getElementById('barChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:10,b:30};
+  const vals = monthly.map(m=> m.value || 0);
+  const max = Math.max(...vals, 1);
+  const bw = (W - pad.l - pad.r) / vals.length;
+  let html = `<line x1="${pad.l}" y1="${H-pad.b}" x2="${W-pad.r}" y2="${H-pad.b}" stroke="rgba(47,107,70,0.15)" stroke-width="1"/>`;
+  vals.forEach((v, i) => {
+    const x = pad.l + i * bw + 2;
+    const bh = (v / max) * (H - pad.t - pad.b);
+    const y = H - pad.b - bh;
+    html += `<rect x="${x}" y="${y}" width="${bw-4}" height="${bh}" fill="rgba(47,107,70,0.6)" rx="2"></rect>`;
+    if (i % 2 === 0){ html += `<text x="${x + (bw-4)/2}" y="${H-pad.b+12}" fill="#5a7a99" font-size="6.5" text-anchor="middle">${monthly[i].period}</text>`; }
+  });
+  svg.innerHTML = html;
+}
+
+function renderLineChartWithData(monthly){
+  if (!monthly || !monthly.length) return renderLineChart();
+  const svg = document.getElementById('lineChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:12,b:28};
+  const vals = monthly.map(m=> m.value || 0);
+  const months = monthly.map(m=> m.period.split('-').slice(-1)[0]);
+  const max = Math.max(...vals, 1);
+  const pts = vals.map((v, i) => { const x = pad.l + i * ((W - pad.l - pad.r) / (vals.length - 1)); const y = pad.t + (H - pad.t - pad.b) * (1 - v/max); return [x,y]; });
+  const pathD = pts.map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0]} ${H-pad.b} L${pts[0][0]} ${H-pad.b} Z`;
+  let html = `<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6aa37f" stop-opacity="0.25"/><stop offset="100%" stop-color="#2f6b46" stop-opacity="0"/></linearGradient></defs>`;
+  html += `<path d="${areaD}" fill="url(#areaGrad)"/>`;
+  html += `<path d="${pathD}" fill="none" stroke="#2f6b46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  pts.forEach(([x,y],i)=>{ html += `<circle cx="${x}" cy="${y}" r="3.5" fill="#06120a" stroke="#2f6b46" stroke-width="1.5"/>`; html += `<text x="${x}" y="${H-pad.b+14}" fill="#9bb29a" font-size="7.5" text-anchor="middle">${months[i]}</text>`; });
+  svg.innerHTML = html;
+}
+
+// Download historical data for a station via server endpoint and show status in the row
+function downloadStation(stationName, btn){
+  if (!stationName) return;
+  const statusEl = btn.parentNode.querySelector('.dl-status');
+  btn.disabled = true; btn.classList.add('loading');
+  // show spinner
+  const spinner = document.createElement('span'); spinner.className = 'spinner';
+  statusEl.innerHTML = ''; statusEl.appendChild(spinner);
+
+  // default full-range; change if you add UI for dates
+  // read date range from UI inputs (fallback to defaults)
+  let from = document.getElementById('downloadFrom') ? document.getElementById('downloadFrom').value : '';
+  let to = document.getElementById('downloadTo') ? document.getElementById('downloadTo').value : '';
+  if (!from) from = '2015-06-11';
+  if (!to) to = '2026-02-21';
+  const payload = { station_name: stationName, from_date: from, to_date: to, use_local: true };
+
+  // Incluir metadatos de la estacion para que el servidor pueda resolver
+  // correctamente los parametros de export.php (t_e e estado)
+  const stationObj = STATIONS_POOL.find(x => (x && x.name === stationName));
+  if (stationObj) {
+    if (stationObj.cod) payload.station_code = stationObj.cod;
+    // ico: 'M' o 'H' del portal SENAMHI — parametro t_e directo para export.php
+    // Si esta disponible (lista remota), el servidor lo usara sin heuristica
+    if (stationObj.ico && (stationObj.ico === 'M' || stationObj.ico === 'H')) payload.ico = stationObj.ico;
+    // tipo: 'Convencional' o 'Automatica' — fallback si ico no esta disponible
+    if (stationObj.tipo) payload.tipo = stationObj.tipo;
+    // estado_operativo: 'OPERATIVA', 'INACTIVA', 'PARCIAL' — informativo
+    if (stationObj.estadoOp) payload.estado_operativo = stationObj.estadoOp;
+  }
+
+  fetch('/api/save_by_name', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .then(j => {
+      try{ statusEl.removeChild(spinner); }catch(e){}
+      btn.disabled = false; btn.classList.remove('loading');
+      if (j && j.saved){
+        // Prefer the download_url returned by the server. If missing, build one from file name.
+        let dl = j.download_url || (j.file ? ('/api/download_output?file=' + encodeURIComponent(j.file)) : null);
+        if (!dl){
+          // fallback: show link to path if available (non-ideal for cross-origin)
+          const a = document.createElement('a');
+          a.href = '/'+ String(j.path).replace(/\\\\/g,'/');
+          a.textContent = 'Descargado';
+          a.style.color = 'var(--accent2)';
+          a.target = '_blank';
+          statusEl.appendChild(a);
+          return;
+        }
+
+        // Ensure absolute URL when page is opened from file:// or different origin
+        if (dl.startsWith('/')) dl = (location && location.origin ? location.origin : '') + dl;
+
+        // Fetch the file as blob and trigger a download to avoid path/url issues in browsers
+        fetch(dl).then(res => {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.blob();
+        }).then(blob => {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = j.file || (stationName + '.xlsx');
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+          statusEl.textContent = 'Descargado'; statusEl.style.color = 'var(--accent2)';
+        }).catch(err => {
+          console.warn('download file error', err);
+          statusEl.textContent = 'Error descarga'; statusEl.style.color = 'var(--warn)';
+        });
+      } else {
+        const msg = (j && j.error) ? j.error : 'Error';
+        statusEl.textContent = msg; statusEl.style.color = 'var(--warn)';
+      }
+    }).catch(err=>{
+      try{ statusEl.removeChild(spinner); }catch(e){}
+      btn.disabled = false; btn.classList.remove('loading');
+      statusEl.textContent = String(err || 'Error'); statusEl.style.color = 'var(--warn)';
+      console.warn('downloadStation error', err);
+    });
+}
+
+// ── LEAFLET MAP: inicialización y trazado de estaciones (usa imagen satelital ESRI)
+let leafletMap = null;
+let stationsLayer = null;
+// Colores por tipo y estado:
+//   Convencional activa  => verde  (#6aa37f)
+//   Automatica activa    => azul   (#4da6ff)
+//   Inactiva (cualquier tipo) => gris oscuro (#888888)
+//   Parcialmente activa  => naranja (#d4853a)
+const TYPE_COLOR = {
+  'convencional': '#6aa37f',
+  'automatica':   '#4da6ff',
+  'inactiva':     '#888888',
+  'parcial':      '#d4853a'
+};
+// Tamaño de los puntos de estaciones (ajustar a gusto)
+const STATION_RADIUS = 3;
+
+function initLeaflet() {
+  if (leafletMap) return;
+  leafletMap = L.map('leafletMap', { zoomControl: true }).setView([-9.3, -75.0], 5);
+
+  // OpenStreetMap como capa por defecto (base)
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(leafletMap);
+
+  // ESRI WorldImagery (satélite) como alternativa
+  const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+  });
+
+  const baseMaps = { 'OSM': osm, 'Satellite (Esri)': esri };
+  L.control.layers(baseMaps).addTo(leafletMap);
+
+  // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
+  try {
+    if (!leafletMap.getPane('stationsPane')) {
+      leafletMap.createPane('stationsPane');
+      const p = leafletMap.getPane('stationsPane');
+      p.style.zIndex = 650; // por encima de overlay pane
+      p.style.pointerEvents = 'auto';
+    }
+    // Controles de depuración deshabilitados en producción
+  } catch(e) { /* ignore if not supported */ }
+
+  stationsLayer = L.layerGroup().addTo(leafletMap);
+}
+
+// GEOJSON cache helper
+const GEO_CACHE = {};
+function loadGeo(layer){
+  if (GEO_CACHE[layer]) return Promise.resolve(GEO_CACHE[layer]);
+  return fetch('/api/geojson?layer='+encodeURIComponent(layer)).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
+}
+
+// Mostrar cuencas que intersectan un departamento seleccionado
+function showCuencasInDept(deptName){
+  const out = document.getElementById('deptSublist');
+  out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Buscando cuencas...</div>';
+  Promise.all([loadGeo('departamentos'), loadGeo('cuencas')]).then(([depts, cuencas]) => {
+    if (!depts || !Array.isArray(depts.features) || !cuencas || !Array.isArray(cuencas.features)){
+      out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No hay datos geográficos.</div>';
+      return;
+    }
+    // encontrar feature del depto por matching de propiedades (más tolerante)
+    function norm(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
+    const target = norm(deptName);
+    let deptFeat = null;
+    // 1) exact equality
+    deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v)===target));
+    // 2) inclusion (property contains deptName)
+    if (!deptFeat) deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v).includes(target)));
+    // 3) token overlap (split words)
+    if (!deptFeat){
+      const toks = target.split(/\s+/).filter(Boolean);
+      deptFeat = depts.features.find(f=>{
+        if (!f || !f.properties) return false;
+        const vals = Object.values(f.properties).map(v=>norm(v));
+        return toks.every(t=> vals.some(v=> v.includes(t)));
+      });
+    }
+    if (!deptFeat){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Departamento no encontrado en capas.</div>'; return; }
+
+    const found = [];
+    cuencas.features.forEach(cf=>{
+      try{
+        const intersects = turf.booleanIntersects(deptFeat, cf);
+        if (intersects){
+          // Usar _getCuencaName para consistencia: prioriza campo NOMBRE (cuencas individuales)
+          const nm = _getCuencaName(cf.properties || {});
+          if (nm) found.push(nm);
+        }
+      }catch(e){ /* ignore feature errors */ }
+    });
+    const uniq = Array.from(new Set(found)).sort((a,b)=> a.localeCompare(b,'es'));
+    if (!uniq.length){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No se encontraron cuencas dentro del departamento.</div>'; return; }
+    // render small buttons
+    out.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.display='grid'; wrap.style.gridTemplateColumns='1fr'; wrap.style.gap='6px';
+    uniq.forEach(nm=>{
+      const b = document.createElement('button');
+      b.className='dept-btn';
+      b.style.fontSize='0.78rem';
+      b.textContent = nm;
+      b.onclick = ()=>{
+        // select as cuenca
+        // remove selected on cuenca list and set selection
+        document.querySelectorAll('#cuencaList .dept-btn').forEach(el=>el.classList.remove('selected'));
+        b.classList.add('selected');
+        selectedArea = nm; selectedAreaType='cuenca';
+        fetchAndShowLayer('cuencas', nm);
+      };
+      wrap.appendChild(b);
+    });
+    out.appendChild(wrap);
+  }).catch(err=>{ console.warn('showCuencasInDept error', err); out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Error buscando cuencas.</div>'; });
+}
+
+function plotStationsOnMap(stations) {
+  if (!leafletMap) initLeaflet();
+  stationsLayer.clearLayers();
+  const markers = [];
+  const countWithCoords = stations.filter(s => s && s.lat != null && s.lon != null).length;
+  console.log('plotStationsOnMap -> total stations=', stations.length, 'with coords=', countWithCoords);
+  let countByType = { automatica: 0, convencional: 0, other: 0 };
+  const debugSamples = [];
+  stations.forEach((s, si) => {
+    if (s.lat == null || s.lon == null) return;
+    // Determinar color del marcador segun tipo Y estado operativo:
+    //   - INACTIVA o CLAUSURADA o SUSPENDIDA => gris (#888888)
+    //   - PARCIALMENTE activa               => naranja (#d4853a)
+    //   - Convencional operativa            => verde (#6aa37f)
+    //   - Automatica operativa              => azul (#4da6ff)
+    function normalizeStr(x){
+      try { return (x||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(); }
+      catch(e){ return (x||'').toString().toLowerCase(); }
+    }
+    const estadoNorm = normalizeStr(s.estadoOp || '');
+    const tipoNorm = normalizeStr(s.tipo);
+    let tipoKey;
+    if (estadoNorm === 'inactiva' || estadoNorm.indexOf('clausur') !== -1 || estadoNorm.indexOf('suspend') !== -1) {
+      tipoKey = 'inactiva';
+    } else if (estadoNorm === 'parcial' || estadoNorm.indexOf('parcial') !== -1) {
+      tipoKey = 'parcial';
+    } else if (tipoNorm.indexOf('conv') !== -1) {
+      tipoKey = 'convencional';
+    } else if (tipoNorm.indexOf('auto') !== -1) {
+      tipoKey = 'automatica';
+    } else {
+      tipoKey = 'convencional'; // fallback
+    }
+    const color = TYPE_COLOR[tipoKey] || '#6aa37f';
+    if (tipoKey in countByType) countByType[tipoKey]++; else countByType.other++;
+    if (si < 40) debugSamples.push({ idx: si, name: s.name, tipo_raw: s.tipo || null, estadoOp: s.estadoOp || null, tipoKey, color });
+    const opts = { radius: STATION_RADIUS, color: '#333333', weight:1, fillColor: color, fillOpacity:0.95 };
+    try { opts.pane = 'stationsPane'; } catch(e){}
+    const marker = L.circleMarker([s.lat, s.lon], opts);
+    const popup = `<div style="font-weight:600;color:${color}">${s.name}</div><div style="font-size:0.85rem;color:#99b7d1">${s.dept || ''} · ${s.cuenca || ''}</div><div style="margin-top:6px">Prec: <strong>${s.prec} mm</strong><br>Temp: <strong>${s.temp} °C</strong></div>`;
+    marker.bindPopup(popup);
+    marker.on('click', () => {
+      document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
+      updateKPIs(s.dept || 'ÁREA');
+      renderTable(s.dept || 'ÁREA');
+    });
+    marker.addTo(stationsLayer);
+    try { if (marker.bringToFront) marker.bringToFront(); } catch(e){}
+    markers.push(marker);
+  });
+  if (markers.length) {
+    const group = L.featureGroup(markers.map(m => m));
+    leafletMap.fitBounds(group.getBounds().pad(0.2));
+  }
+  console.log('plotStationsOnMap -> markers=', markers.length);
+  console.log('plotStationsOnMap -> counts by type', countByType);
+  if (debugSamples.length) {
+    try { console.log('plotStationsOnMap -> debugSamples (first 40)'); console.table(debugSamples.slice(0,20)); } catch(e) { console.log(debugSamples); }
+  }
+  // actualizar contador visual en el badge del mapa
+  try { document.getElementById('map-dept-label').textContent = (markers.length ? markers.length + ' Estaciones' : document.getElementById('map-dept-label').textContent); } catch(e){}
+  try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
+  // asegurar capa de estaciones en primer plano
+  try {
+    if (stationsLayer && stationsLayer.addTo) stationsLayer.addTo(leafletMap);
+    if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront();
+  } catch(e) { /* noop */ }
+}
+
+// Layer groups for exclusive display of shapefile layers
+const layerGroups = {
+  departamentos: null,
+  cuencas: null,
+  sectores: null
+};
+
+function clearAllOverlays() {
+  if (!leafletMap) return;
+  for (const k in layerGroups) {
+    if (layerGroups[k]) {
+      try { leafletMap.removeLayer(layerGroups[k]); } catch(e){}
+      layerGroups[k] = null;
+    }
+  }
+}
+
+function fetchAndShowLayer(layer, name) {
+  if (!leafletMap) initLeaflet();
+
+  // Remove any other layer groups so only the selected one remains
+  for (const k in layerGroups) {
+    if (k !== layer && layerGroups[k]) {
+      try { leafletMap.removeLayer(layerGroups[k]); } catch(e){}
+      layerGroups[k] = null;
+    }
+  }
+
+  const url = '/api/geojson?layer=' + encodeURIComponent(layer) + (name?('&name='+encodeURIComponent(name)):'');
+  fetch(url).then(r => r.json()).then(geo => {
+    if (!geo || !geo.features || geo.features.length === 0) return;
+
+    // replace existing group for this layer
+    if (layerGroups[layer]) {
+      try { leafletMap.removeLayer(layerGroups[layer]); } catch(e){}
+      layerGroups[layer] = null;
+    }
+
+    const style = (layer === 'departamentos') ? { color: '#2f6b46', weight: 2, fillOpacity: 0.06 }
+          : (layer === 'cuencas') ? { color: '#4b7f5f', weight: 2, fillOpacity: 0.06 }
+          : { color: '#3e6b56', weight: 2, fillOpacity: 0.06 };
+
+    layerGroups[layer] = L.geoJSON(geo, {
+      style: style,
+      onEachFeature: function(f, lyr) {
+        let title = '';
+        if (layer === 'cuencas') {
+          // Para cuencas usar _getCuencaName para obtener nombre individual (campo NOMBRE)
+          title = _getCuencaName(f.properties || '') || '';
+        } else {
+          for (const k in f.properties) {
+            const lk = String(k).toLowerCase();
+            if (lk.includes('name') || lk.includes('nombre') || lk.includes('depart') || lk.includes('dpto') || lk.includes('prov') || lk.includes('est')) { title = f.properties[k]; break; }
+          }
+        }
+        lyr.bindPopup(title || 'Area');
+      }
+    }).addTo(leafletMap);
+
+    // asegurarse que la capa de estaciones quede encima de las polígonos
+    try {
+      if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront();
+    } catch(e) { /* noop */ }
+
+    try { leafletMap.fitBounds(layerGroups[layer].getBounds().pad(0.1)); } catch(e){}
+  }).catch(err => console.warn('geojson load error', err));
+}
+
+// ── INIT ──
+// Centrar mapa en una estación por nombre (usa `STATIONS_POOL`)
+function focusStationOnMap(stationName){
+  if (!stationName) return;
+  const s = STATIONS_POOL.find(x => x && (x.name === stationName || String(x.name||'').trim() === String(stationName||'').trim()));
+  if (!s){
+    alert('Estación no encontrada en la lista local.');
+    return;
+  }
+  if (s.lat == null || s.lon == null){
+    alert('La estación no tiene coordenadas disponibles para mostrar en el mapa.');
+    return;
+  }
+  if (!leafletMap) initLeaflet();
+  try{
+    leafletMap.setView([s.lat, s.lon], 12);
+    const popupHtml = `<div style="font-weight:600">${s.name}</div><div style="font-size:0.9rem;color:#99b7d1">${s.dept || ''} · ${s.cuenca || ''}</div>`;
+    L.popup({closeOnClick:true, autoClose:true}).setLatLng([s.lat, s.lon]).setContent(popupHtml).openOn(leafletMap);
+  }catch(e){
+    console.warn('focusStationOnMap error', e);
+  }
+}
+
+applyFilters();
+
+// Download all stations from Maestra (heavy operation). Shows modal with results.
+function processAllFromMaestra(){
+  if (!confirm('¿Iniciar descarga de toda la Maestra? Esto descargará datos para todas las estaciones listadas y puede tardar mucho.')) return;
+  const btn = document.getElementById('downloadMaestraBtn');
+  btn.disabled = true; btn.textContent = 'Descargando...';
+  const from = document.getElementById('downloadFrom') ? document.getElementById('downloadFrom').value : '2015-06-11';
+  const to = document.getElementById('downloadTo') ? document.getElementById('downloadTo').value : '2026-02-21';
+  const payload = { from_date: from, to_date: to, use_local: true };
+  const modal = buildPreviewModal(); modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Iniciando descarga de la Maestra...</div>'; modal.show();
+  fetch('/api/process_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .then(j => {
+      btn.disabled = false; btn.textContent = 'Descargar Maestra';
+      if (!j || !Array.isArray(j.saved_files)){
+        modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">No se recibieron resultados.</div>';
+        return;
+      }
+      if (j.saved_files.length === 0){
+        modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">No se guardaron archivos (posible falta de datos).</div>';
+        return;
+      }
+      const list = j.saved_files.map(p => `<div style="padding:6px 0"><a href="/${String(p).replace(/\\\\/g,'/')}" target="_blank" style="color:var(--accent2)">${p.split('/').pop()}</a></div>`).join('');
+      modal.querySelector('.modal-body').innerHTML = `<div style="font-weight:700">Archivos guardados: ${j.saved_files.length}</div><div style="margin-top:8px;max-height:360px;overflow:auto">${list}</div>`;
+    }).catch(err=>{
+      btn.disabled = false; btn.textContent = 'Descargar Maestra';
+      modal.querySelector('.modal-body').innerHTML = `<div style="padding:12px;color:var(--muted)">Error iniciando proceso: ${String(err)}</div>`;
+      console.warn('processAllFromMaestra error', err);
+    });
+}
+
+// Debug controls removed
+
+// ---------- Descarga histórica desde botón ----------
+function _createSpinnerHTML(){
+  return '<span class="spinner" aria-hidden="true"></span>';
+}
+
+function downloadHistoryClickHandler(e){
+  const btn = e.currentTarget;
+  let station = btn.dataset.station || btn.getAttribute('data-station');
+  // attempt to find nearby station name
+  if (!station){
+    const p = btn.closest('.list-item') || btn.closest('.station') || document.querySelector('.list-item.selected');
+    if (p){
+      const nameEl = p.querySelector('.name') || p.querySelector('.station-name');
+      if (nameEl) station = nameEl.textContent.trim();
+    }
+  }
+  if (!station) station = prompt('Ingrese nombre de estación para descargar historial:');
+  if (!station) return;
+
+  const from = btn.dataset.from || '2015-01-01';
+  const to = btn.dataset.to || new Date(Date.now()-86400e3).toISOString().slice(0,10);
+
+  btn.disabled = true;
+  const prev = btn.innerHTML;
+  btn.innerHTML = _createSpinnerHTML() + 'Generando...';
+
+  fetch('/api/save_by_name', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ station_name: station, from_date: from, to_date: to, use_local: false })
+  }).then(r => r.json()).then(j => {
+    btn.disabled = false; btn.innerHTML = prev;
+    if (j && j.saved && j.download_url){
+      // trigger download (build absolute URL to avoid file:// or origin issues)
+      try {
+        const origin = window.location && window.location.origin ? window.location.origin : (window.location.protocol + '//' + window.location.host);
+        const url = (j.download_url.startsWith('http') ? j.download_url : origin + j.download_url);
+        console.log('Download URL:', url, j);
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch(err){
+        console.error('Error launching download', err, j);
+        alert('No se pudo iniciar la descarga automáticamente. URL: ' + (j.download_url || JSON.stringify(j)));
+      }
+    } else {
+      const msg = j && j.error ? j.error : JSON.stringify(j);
+      alert('No se pudo generar el archivo: ' + msg);
+    }
+  }).catch(err => {
+    btn.disabled = false; btn.innerHTML = prev;
+    console.error('downloadHistory error', err);
+    alert('Error iniciando descarga: ' + String(err));
+  });
+}
+
+// Attach to any button with class `download-history` on page load
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.download-history').forEach(b => {
+    b.addEventListener('click', downloadHistoryClickHandler);
+  });
+});
+
+// small spinner style
+const style = document.createElement('style');
+style.textContent = `
+.spinner{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.18);border-top-color:var(--accent2);animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+`;
+document.head.appendChild(style);
+</script>
+</body>
+</html>

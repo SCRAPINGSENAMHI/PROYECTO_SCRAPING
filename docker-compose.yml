@@ -1,0 +1,38 @@
+# docker-compose.yml
+# Nota: el atributo "version" esta obsoleto en Compose V2 y genera
+# un warning; se omite intencionalmente.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: senamhi-dashboard:latest
+    container_name: senamhi_web
+    ports:
+      - "5000:5000"
+    volumes:
+      # Unico volumen: persiste los XLSX generados por el scraper.
+      # NO se monta el directorio raiz del proyecto para que la imagen
+      # sea la fuente de verdad de codigo y datos estaticos.
+      - senamhi_outputs:/app/DATA/outputs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - PROJ_LIB=/usr/share/proj
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+# Volumen nombrado gestionado por Docker.
+# Inspeccion : docker volume inspect senamhi_outputs
+# Backup     : docker run --rm \
+#                -v senamhi_outputs:/data \
+#                -v $(pwd):/backup \
+#                alpine tar czf /backup/outputs_backup.tar.gz /data
+volumes:
+  senamhi_outputs:
