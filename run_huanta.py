@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 
-from app import get_stations, download_station_data
+from app import get_stations, download_station_data, _normalize_downloaded_df
 
 
 def try_download(row, from_date, to_date):
@@ -69,7 +69,11 @@ def main():
         return
 
     outpath = out_dir / f"HUANTA_{from_date}_to_{to_date}_cod{used_cod}_ico{used_ico}.xlsx"
-    df.to_excel(outpath, index=False)
+    try:
+        df_save = _normalize_downloaded_df(df)
+    except Exception:
+        df_save = df
+    df_save.to_excel(outpath, index=False)
     print('✓ Guardado:', outpath)
     print('Registros:', len(df))
 

@@ -954,9 +954,13 @@ def process_all_stations(df_stations, from_date='2024-01-01', to_date='2024-12-3
             df = download_station_data(row.get('cod'), row.get('ico'), row.get('estado'), row.get('cod_old'), from_date, to_date, verbose=False)
             if df is not None and len(df) > 0:
                 # Guardar
-                try:
-                    df.to_excel(outpath, index=False)
-                    saved_files.append(outpath)
+                    try:
+                        try:
+                            df_to_save = _normalize_downloaded_df(df)
+                        except Exception:
+                            df_to_save = df
+                        df_to_save.to_excel(outpath, index=False)
+                        saved_files.append(outpath)
                     if verbose:
                         print(f"   ✓ Guardado: {outpath}")
                 except Exception as e:
