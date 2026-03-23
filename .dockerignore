@@ -1,0 +1,33 @@
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Outputs generados (se montan como volumen en docker-compose)
+DATA/outputs/
+app/DATA/
+
+# Variables de entorno
+.env
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporales
+tmp_*.json
+*.tmp
+*.log
