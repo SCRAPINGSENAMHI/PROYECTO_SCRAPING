@@ -70,22 +70,31 @@ def _load_scraper_module():
 scraper = _load_scraper_module()
 
 
+_MAESTRA_FILES = ['Maestra_de_estaciones_Senamhi.xlsx', 'Estaciones_Meteorológicas_Peru.xlsx']
+
 def _find_data_dir():
-    """Buscar la carpeta `DATA` en la jerarquía de carpetas, retornando
-    la primera que exista. Esto soporta ejecutar `server.py` desde el root
-    o desde `app/` cuando el proyecto fue movido.
+    """Buscar la carpeta `DATA` que contenga la Maestra de estaciones.
+    Soporta Docker (/app/DATA) y local Windows (Web_Scraping_SENAMHI_/DATA).
+    Prefiere directorios que tengan los archivos Excel reales sobre directorios vacios.
     """
-    p = Path(__file__).resolve().parents[0]
-    # revisar hasta 4 niveles hacia arriba, preferir niveles superiores
-    for i in range(3, -1, -1):
+    p = Path(__file__).resolve().parent
+    candidates = []
+    for i in range(4):
         cand = p
         for _ in range(i):
             cand = cand.parent
-        data_dir = cand / 'DATA'
+        candidates.append(cand / 'DATA')
+
+    # Primero: buscar un directorio que tenga la Maestra
+    for data_dir in candidates:
+        if data_dir.exists() and any((data_dir / f).exists() for f in _MAESTRA_FILES):
+            return data_dir
+    # Segundo: cualquier directorio DATA que exista
+    for data_dir in candidates:
         if data_dir.exists() and data_dir.is_dir():
             return data_dir
-    # fallback: DATA en la misma carpeta aunque no exista (mantener comportamiento)
-    return Path(__file__).resolve().parents[0] / 'DATA'
+    # fallback
+    return p / 'DATA'
 
 
 @app.route('/')

@@ -1201,10 +1201,19 @@ def process_all_stations(df_stations, from_date='2024-01-01', to_date='2024-12-3
 # ----------------------------------------
 
 # Directorio de datos por defecto
-# Busca DATA/ primero como hermano de este archivo (Docker: /app/DATA)
-# y si no existe, sube un nivel (local: Web_Scraping_SENAMHI_/DATA)
+# Busca la carpeta DATA/ que contenga la Maestra de estaciones.
+# Soporta: Docker (/app/DATA), local Windows (Web_Scraping_SENAMHI_/DATA)
 _here = Path(__file__).resolve().parent
-DEFAULT_DATA_DIR = (_here / 'DATA') if (_here / 'DATA').exists() else (_here.parent / 'DATA')
+_MAESTRA_FILES = ['Maestra_de_estaciones_Senamhi.xlsx', 'Estaciones_Meteorológicas_Peru.xlsx']
+
+def _resolve_data_dir():
+    for candidate in (_here / 'DATA', _here.parent / 'DATA'):
+        if candidate.exists() and any((candidate / f).exists() for f in _MAESTRA_FILES):
+            return candidate
+    # fallback: directorio hermano aunque este vacio
+    return _here / 'DATA'
+
+DEFAULT_DATA_DIR = _resolve_data_dir()
 
 def get_stations(use_local=True, local_path=None):
     """Devuelve el DataFrame de estaciones.
