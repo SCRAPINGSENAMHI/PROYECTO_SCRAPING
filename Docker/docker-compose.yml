@@ -5,8 +5,8 @@
 services:
   web:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: Docker/Dockerfile
     image: senamhi-dashboard:latest
     container_name: senamhi_web
     ports:
