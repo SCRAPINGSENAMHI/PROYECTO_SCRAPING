@@ -69,9 +69,12 @@ RUN GDAL_VERSION=$(gdal-config --version) && \
 # -----------------------------------------------------------
 # 5. Copiar codigo fuente (explicito, sin COPY . /app)
 # -----------------------------------------------------------
-COPY app.py                    /app/app.py
-COPY server.py                 /app/server.py
-COPY dashboard_hidrometeo.html /app/dashboard_hidrometeo.html
+COPY app/app.py                    /app/app.py
+COPY app/server.py                 /app/server.py
+COPY app/dashboard_historico.html  /app/dashboard_historico.html
+COPY app/dashboard_hidrometeo.html /app/dashboard_hidrometeo.html
+COPY app/static/                   /app/static/
+COPY app/scripts/                  /app/scripts/
 
 # -----------------------------------------------------------
 # 6. Copiar datos estaticos (shapefiles + Excel maestra)
