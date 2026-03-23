@@ -101,9 +101,10 @@ EXPOSE 5000
 #    --access-logfile - : logs a stdout (visible en docker logs)
 # -----------------------------------------------------------
 CMD ["gunicorn", \
-     "--workers", "2", \
+     "--workers", "1", \
+     "--threads", "4", \
      "--bind", "0.0.0.0:5000", \
-     "--timeout", "120", \
+     "--timeout", "180", \
      "--access-logfile", "-", \
      "--error-logfile", "-", \
      "server:app"]
