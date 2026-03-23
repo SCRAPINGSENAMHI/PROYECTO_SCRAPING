@@ -842,7 +842,7 @@ function renderTable(area) {
       <td style="color:var(--muted)">${s.dept || ''}</td>
       <td style="color:var(--muted)">${s.cuenca || ''}</td>
       <td>${estadoBadge}</td>
-      <td style="display:flex;gap:8px;align-items:center;justify-content:flex-end">${viewBtn}${ savedHtml ? savedHtml : '' }<button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar historial</button><span class="dl-status" style="margin-left:8px"></span></td>
+      <td style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${viewBtn}${ savedHtml ? savedHtml : '' }<input class="dl-from" type="date" value="2010-01-01" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha inicio"><input class="dl-to" type="date" value="${new Date().toISOString().slice(0,10)}" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha fin"><button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar</button><span class="dl-status" style="margin-left:4px"></span></td>
     </tr>`;
   }).join('');
 }
@@ -1020,7 +1020,12 @@ function downloadStation(stationName, btn){
   statusEl.appendChild(spinner);
 
   const today = new Date().toISOString().slice(0, 10);
-  const payload = { station_name: stationName, from_date: '2000-01-01', to_date: today, use_local: true };
+  // Leer fechas del mini-picker adjunto al botón si existe, sino usar defecto
+  const fromInput = btn.parentNode.querySelector('.dl-from');
+  const toInput   = btn.parentNode.querySelector('.dl-to');
+  const fromDate  = (fromInput && fromInput.value) ? fromInput.value : '2010-01-01';
+  const toDate    = (toInput   && toInput.value)   ? toInput.value   : today;
+  const payload = { station_name: stationName, from_date: fromDate, to_date: toDate, use_local: true };
   if (btn.dataset.cod)    payload.station_code    = btn.dataset.cod;
   if (btn.dataset.tipo)   payload.tipo            = btn.dataset.tipo;
   if (btn.dataset.estado) payload.estado_operativo= btn.dataset.estado;
