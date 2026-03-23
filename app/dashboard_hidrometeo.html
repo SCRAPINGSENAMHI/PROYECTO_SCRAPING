@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENAMHI · Monitor Hidrometeorológico</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="/static/dashboard.css" />
+<!-- Leaflet JS (will be available to scripts below) -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Turf for spatial operations (contains booleanIntersects) -->
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+</head>
+<body>
+
+<!-- ── LOGIN OVERLAY ── -->
+<div id="loginOverlay" style="
+  position:fixed;inset:0;z-index:9999;
+  background:radial-gradient(ellipse at 60% 40%, #0d2a1e 0%, #060f0a 70%);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Space Grotesk',sans-serif;
+">
+  <div style="
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:20px;
+    padding:48px 40px 40px;
+    width:340px;
+    backdrop-filter:blur(18px);
+    box-shadow:0 24px 80px rgba(0,0,0,0.6);
+    text-align:center;
+  ">
+    <div style="font-size:2.4rem;margin-bottom:8px">🌦</div>
+    <div style="font-size:1.15rem;font-weight:700;color:#e2f0e8;letter-spacing:0.02em">SENAMHI</div>
+    <div style="font-size:0.72rem;color:#5a8f70;margin-bottom:32px;letter-spacing:0.06em;text-transform:uppercase">Monitor Hidrometeorológico</div>
+
+    <div style="text-align:left;margin-bottom:14px">
+      <label style="display:block;font-size:0.68rem;font-weight:600;color:#5a8f70;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">Usuario</label>
+      <input id="loginUser" type="text" placeholder="Ingresa tu usuario" autocomplete="username" style="
+        width:100%;box-sizing:border-box;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.1);
+        border-radius:10px;padding:11px 14px;
+        color:#e2f0e8;font-size:0.85rem;font-family:inherit;
+        outline:none;transition:border-color 0.2s;
+      "/>
+    </div>
+    <div style="text-align:left;margin-bottom:24px">
+      <label style="display:block;font-size:0.68rem;font-weight:600;color:#5a8f70;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">Contraseña</label>
+      <input id="loginPass" type="password" placeholder="Ingresa tu contraseña" autocomplete="current-password" style="
+        width:100%;box-sizing:border-box;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.1);
+        border-radius:10px;padding:11px 14px;
+        color:#e2f0e8;font-size:0.85rem;font-family:inherit;
+        outline:none;transition:border-color 0.2s;
+      "/>
+    </div>
+
+    <div id="loginError" style="display:none;color:#ef4444;font-size:0.72rem;margin-bottom:14px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);border-radius:8px;padding:8px 12px">
+      Usuario o contraseña incorrectos
+    </div>
+
+    <button onclick="doLogin()" style="
+      width:100%;padding:12px;
+      background:linear-gradient(135deg,#2f6b46,#1e4a30);
+      border:none;border-radius:10px;
+      color:#e2f0e8;font-size:0.9rem;font-weight:700;font-family:inherit;
+      cursor:pointer;letter-spacing:0.03em;
+      transition:opacity 0.2s,transform 0.1s;
+    " onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'"
+       onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'">
+      Ingresar
+    </button>
+
+    <div style="margin-top:20px;font-size:0.62rem;color:rgba(90,143,112,0.5);letter-spacing:0.04em">
+      ACCESO RESTRINGIDO · SENAMHI PERÚ
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // Focus al campo usuario al cargar
+  window.addEventListener('DOMContentLoaded', function(){
+    var u = document.getElementById('loginUser');
+    if(u) u.focus();
+    // Enter en cualquier campo dispara login
+    ['loginUser','loginPass'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(el) el.addEventListener('keydown', function(e){ if(e.key==='Enter') doLogin(); });
+    });
+    // Estilo focus en inputs
+    ['loginUser','loginPass'].forEach(function(id){
+      var el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('focus', function(){ this.style.borderColor='rgba(95,207,141,0.5)'; });
+      el.addEventListener('blur',  function(){ this.style.borderColor='rgba(255,255,255,0.1)'; });
+    });
+  });
+})();
+
+function doLogin(){
+  var user    = (document.getElementById('loginUser').value||'').trim();
+  var pass    = (document.getElementById('loginPass').value||'').trim();
+  var err     = document.getElementById('loginError');
+  var overlay = document.getElementById('loginOverlay');
+  if(user === 'Porras' && pass === 'Porras'){
+    overlay.style.transition = 'opacity 0.4s';
+    overlay.style.opacity = '0';
+    setTimeout(function(){ overlay.style.display='none'; }, 400);
+  } else {
+    err.style.display = 'block';
+    document.getElementById('loginPass').value = '';
+    document.getElementById('loginPass').focus();
+    overlay.querySelector('div').style.animation = 'shake 0.35s';
+    setTimeout(function(){ overlay.querySelector('div').style.animation=''; }, 400);
+  }
+}
+</script>
+<style>
+@keyframes shake {
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-8px)}
+  40%{transform:translateX(8px)}
+  60%{transform:translateX(-5px)}
+  80%{transform:translateX(5px)}
+}
+</style>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌦</div>
+    <div>
+      <div class="logo-top">SENAMHI · Monitor Hidrometeorológico</div>
+      <div class="logo-sub">Servicio Nacional de Meteorología e Hidrología del Perú</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><span class="live-dot"></span>EN VIVO</div>
+    <div class="header-time" id="clock"></div>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">Área de Análisis</div>
+      <div class="tab-switcher">
+        <button class="tab-btn active" onclick="switchTab('dept', this)">Departamento</button>
+        <button class="tab-btn" onclick="switchTab('cuenca', this)">Cuenca</button>
+        <button class="tab-btn" onclick="switchTab('zona', this)">Sector</button>
+      </div>
+
+      <!-- DEPARTAMENTOS -->
+      <div class="sel-panel active" id="panel-dept">
+        <div class="dept-grid" id="deptGrid"></div>
+        <div id="deptSublist" style="padding-top:12px;"></div>
+      </div>
+
+      <!-- CUENCAS -->
+      <div class="sel-panel" id="panel-cuenca">
+        <div class="list-items" id="cuencaList"></div>
+      </div>
+
+      <!-- SECTORES CLIMÁTICOS -->
+      <div class="sel-panel" id="panel-zona">
+        <div class="list-items" id="zonaList"></div>
+      </div>
+    </div>
+
+    <!-- Se eliminó la sección 'Tipo de Estación' por solicitud del usuario -->
+
+
+    <!-- Se eliminaron las secciones 'Período' y 'Rango para descargar' por solicitud del usuario -->
+
+    <!-- Se eliminó la sección 'Variable' y el botón 'Aplicar Filtros' por solicitud del usuario -->
+
+  </aside>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div style="display:flex; flex-direction:column; height:100%; overflow-y:auto; overflow-x:hidden;">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+      <div class="selection-breadcrumb" id="breadcrumb">
+        PERÚ &rsaquo; <span id="bc-area">TODOS LOS DEPARTAMENTOS</span> &rsaquo; <span id="bc-var">PRECIPITACIÓN</span>
+      </div>
+      <!-- view-toggle removed as requested -->
+      <div class="topbar-actions">
+        <button class="apply-btn" id="downloadMaestraBtn" onclick="resetToNormalView()">Datos meteorológicos</button>
+        <button class="apply-btn" id="siteDownloadsBtn" onclick="window.open('/historico','_blank')">Datos históricos</button>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main-content">
+
+      <!-- KPIs removed -->
+
+      <!-- MAP + RIGHT CHARTS -->
+      <div class="map-main-row">
+
+        <!-- INTERACTIVE PERU MAP -->
+        <div class="chart-card map-panel">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Mapa de Estaciones – Perú</div>
+              <div class="chart-sub">Haz clic en un departamento para seleccionarlo</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <!-- Leyenda de colores de marcadores -->
+              <span style="font-size:0.55rem;color:var(--muted);display:flex;gap:10px;align-items:center">
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1e6fbf;margin-right:4px;vertical-align:middle"></span>Conv. Activa</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4da6ff;margin-right:4px;vertical-align:middle"></span>Auto. Activa</span>
+                <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#888888;margin-right:4px;vertical-align:middle"></span>Inactiva</span>
+              </span>
+              <div class="chart-badge" id="map-dept-label">PERÚ COMPLETO</div>
+            </div>
+          </div>
+          <div id="peru-map-wrap" style="position:relative;flex:1;min-height:420px;">
+            <div id="leafletMap" style="width:100%;height:100%;display:block;border-radius:6px;overflow:hidden"></div>
+            <div id="markerCountBadge" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.5);color:#fff;padding:6px 8px;border-radius:6px;font-weight:700;z-index:999">0 puntos</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: charts removed as requested -->
+
+      </div>
+
+      <!-- Station table -->
+      <div class="chart-card wide">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Estaciones en Área Seleccionada</div>
+            <div class="chart-sub">Datos del último reporte · 07h / 13h / 19h</div>
+          </div>
+          <div class="chart-badge" id="est-count-badge">-- Estaciones</div>
+        </div>
+        <div class="table-wrap">
+          <table class="stations">
+            <thead>
+              <tr>
+                <th>Estación</th>
+                <th>Tipo</th>
+                <th>Departamento</th>
+                <th>Cuenca</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── DATA ──────────────────────────────────────────────
+const DEPTS = [
+  'AMAZONAS','ÁNCASH','APURÍMAC','AREQUIPA','AYACUCHO','CAJAMARCA',
+  'CALLAO','CUSCO','HUANCAVELICA','HUÁNUCO','ICA','JUNÍN',
+  'LA LIBERTAD','LAMBAYEQUE','LIMA','LORETO','MADRE DE DIOS',
+  'MOQUEGUA','PASCO','PIURA','PUNO','SAN MARTÍN','TACNA','TUMBES','UCAYALI'
+];
+
+// CUENCAS: will be loaded dynamically from the server (shapefile DATA/CUENCAS/UH.shp)
+let CUENCAS = [];
+
+// Los nombres deben ser substrings del campo SECTOR del shapefile SECTORES.shp
+// Sectores reales: COSTA NORTE, COSTA CENTRO, COSTA SUR,
+//   SIERRA NORTE ORIENTAL/OCCIDENTAL, SIERRA CENTRAL ORIENTAL/OCCIDENTAL,
+//   SIERRA SUR ORIENTAL/OCCIDENTAL,
+//   SELVA NORTE ALTA/BAJA, SELVA CENTRAL ALTA/BAJA, SELVA SUR ALTA/BAJA
+const ZONAS = [
+  { name: 'Costa Norte',    icon: '☀',  tag: 'Árido' },
+  { name: 'Costa Centro',   icon: '☁',  tag: 'Semi-árido' },
+  { name: 'Costa Sur',      icon: '🌵', tag: 'Árido' },
+  { name: 'Sierra Norte',   icon: '⛰',  tag: 'Subtropical' },
+  { name: 'Sierra Central', icon: '⛰',  tag: 'Templado' },
+  { name: 'Sierra Sur',     icon: '⛰',  tag: 'Frío' },
+  { name: 'Selva Norte',    icon: '🌿', tag: 'Tropical' },
+  { name: 'Selva Central',  icon: '🌿', tag: 'Tropical' },
+  { name: 'Selva Sur',      icon: '🌴', tag: 'Tropical' },
+];
+
+let STATIONS_POOL = [];
+let OUTPUT_FILES = [];
+// Si está definido, `renderTable` y `plotStationsOnMap` usarán esta lista en lugar de `STATIONS_POOL`.
+let CURRENT_VISIBLE_STATIONS = null;
+
+// Cargar estaciones desde la API local (server.py)
+fetch('/api/stations')
+  .then(r => r.json())
+  .then(data => {
+    if (Array.isArray(data) && data.length) {
+      console.log('api/stations: received', data.length, 'records');
+      // normalizar lat/lon desde LATITUD / LONGITUD (mayúsculas) u otras variantes
+      STATIONS_POOL = data.map(s => {
+        const name = s.name || s.NOMBRE_ESTACION || s.nombre || 'ND';
+        // Detectar tipo: buscar columnas explícitas como `CONVENCIONAL` o `AUTOMATICA` (case-insensitive)
+        const objKeys = Object.keys(s || {});
+        const hasNonEmpty = (k) => { try { return s[k] !== undefined && s[k] !== null && String(s[k]).trim() !== ''; } catch(e){ return false; } };
+        const normKey = k => String(k || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const convKey = objKeys.find(k => normKey(k).includes('convencional') || normKey(k) === 'conv' || normKey(k).startsWith('conv'));
+        const autoKey = objKeys.find(k => normKey(k).includes('automatica') || normKey(k).includes('auto'));
+        const hasConv = !!(convKey && hasNonEmpty(convKey));
+        const hasAuto = !!(autoKey && hasNonEmpty(autoKey));
+        // Regla: si la columna CONVENCIONAL tiene información => Convencional; en caso contrario => Automática
+        let tipo = 'Automática';
+        if (hasConv) tipo = 'Convencional';
+        else if (hasAuto) tipo = 'Automática';
+        else if (s.tipo) tipo = s.tipo;
+        else if (s.TYPE) tipo = s.TYPE;
+        const dept = s.dept || s.departamento || s.DEPARTAMENTO || 'ND';
+        const cuenca = s.cuenca || s.CUENCA || 'ND';
+        const prec = Number(s.prec || s.PRECIP || 0) || 0;
+        const temp = Number(s.temp || s.TEMP || 0) || 0;
+        const act = Number(s.act || s.activity || 80) || 80;
+        // Campos que me indicas: LATITUD y LONGITUD
+        const rawLat = s.lat ?? s.LATITUD ?? s.Latitud ?? s.LAT ?? s.latitude ?? s.Y ?? null;
+        const rawLon = s.lon ?? s.LONGITUD ?? s.Longitud ?? s.LON ?? s.longitude ?? s.X ?? null;
+        // Normalizar decimales con coma y valores no numéricos
+        function parseCoord(v){
+          if (v === null || v === undefined) return null;
+          const str = String(v).trim();
+          if (str === '') return null;
+          // cambiar coma decimal a punto
+          const cleaned = str.replace(/,/g, '.');
+          const num = parseFloat(cleaned);
+          return Number.isFinite(num) ? num : null;
+        }
+        const lat = parseCoord(rawLat);
+        const lon = parseCoord(rawLon);
+        const codVal = s.cod || s.COD || s.codigo || s.Codigo || s.CODIGO || null;
+        // Estado operativo: viene del campo ESTADO del Excel via server.py
+        const estadoOp = s.estado_operativo || s.ESTADO || 'DESCONOCIDO';
+        // ico: campo del portal SENAMHI ('M' o 'H') — viene de server.py si la lista remota lo tiene
+        const icoVal = s.ico || s.ICO || null;
+        return { name, tipo, estadoOp, dept, cuenca, prec, temp, act, lat, lon, cod: codVal, ico: icoVal, raw: {rawLat, rawLon} };
+      });
+      console.log('STATIONS_POOL sample', STATIONS_POOL.slice(0,3));
+    } else {
+      // fallback: keep small simulated pool with coords
+      STATIONS_POOL = [
+        {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88, lat:-12.0464, lon:-77.0428},
+        {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91, lat:-13.5176, lon:-71.9780}
+      ];
+    }
+
+    // Plotea estaciones en el mapa primero (evita errores si KPIs fueron eliminadas)
+    if (typeof initLeaflet === 'function') initLeaflet();
+    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+    // fetch known saved outputs and mark stations accordingly
+    fetch('/api/outputs').then(r=>r.json()).then(files=>{
+      OUTPUT_FILES = Array.isArray(files)?files:[];
+      // normalize filenames to lower for matching
+      const normFiles = OUTPUT_FILES.map(f=> ({...f, _n: String(f.name||'').toLowerCase()}));
+      STATIONS_POOL.forEach(s=>{
+        try{
+          const nm = String(s.name||'').toLowerCase().replace(/\s+/g,'_');
+          const match = normFiles.find(f=> f._n.indexOf(nm) !== -1 || nm.indexOf(f._n) !== -1 || (String(s.cod||'') && f._n.indexOf(String(s.cod||'').toLowerCase()) !== -1));
+          if (match){ s._saved_path = match.path; s._saved_name = match.name; }
+        }catch(e){}
+      });
+      // re-render table to show saved links
+      try{ renderTable(selectedArea || 'TODOS'); }catch(e){/*ignore*/}
+    }).catch(e=>console.warn('No outputs list available', e));
+    // Luego renderiza tabla y KPIs si las funciones existen
+    try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
+    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+  })
+  .catch(err => {
+    console.warn('No se pudo obtener estaciones desde API:', err);
+    STATIONS_POOL = [
+      {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88},
+      {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91}
+    ];
+    if (typeof initLeaflet === 'function') initLeaflet();
+    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+    try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
+    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+  });
+
+// ── STATE ──
+let selectedArea = null;
+let selectedAreaType = 'dept';
+
+// ── CLOCK ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleString('es-PE', { hour:'2-digit', minute:'2-digit', second:'2-digit', day:'2-digit', month:'short', year:'numeric' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── BUILD SIDEBAR ──
+function buildDeptGrid() {
+  const grid = document.getElementById('deptGrid');
+  DEPTS.forEach(d => {
+    const btn = document.createElement('button');
+    // añadir clase específica para estilos de cuenca (más compactos y multilinea)
+    btn.className = 'dept-btn cuenca-btn';
+    btn.innerHTML = `<span class="dept-icon">🗺️</span><span class="dept-label">${d}</span>`;
+    btn.onclick = () => selectItem(btn, d, 'dept', grid.querySelectorAll('.dept-btn'));
+    grid.appendChild(btn);
+  });
+}
+
+// Render cuencas as buttons en grid de 3 columnas fijas
+function buildCuencaGrid(containerId, items){
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const grid = document.createElement('div');
+  grid.style.display = 'grid';
+  // 3 columnas fijas — cumple requerimiento TAREA 3
+  // columnas responsivas y compactas; min-width 120px para controlar ancho
+  grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(120px, 1fr))';
+  grid.style.gap = '6px';
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'dept-btn';
+    // Layout compacto para caber en 3 columnas: mostrar icono de olas y nombre
+    btn.style.fontSize = '0.82rem';
+    btn.style.padding = '7px 8px';
+    btn.style.lineHeight = '1.2';
+    btn.style.textAlign = 'left';
+    btn.title = item.name; // tooltip con nombre completo al hacer hover
+    // dividir el nombre en dos líneas equilibradas por palabras
+    const words = String(item.name || '').split(/\s+/).filter(Boolean);
+    let part1 = item.name, part2 = '';
+    if (words.length > 1) {
+      const mid = Math.ceil(words.length / 2);
+      part1 = words.slice(0, mid).join(' ');
+      part2 = words.slice(mid).join(' ');
+    }
+    btn.innerHTML = `<span class="dept-icon">🌊</span><span class="dept-label"><span class="line-a">${part1}</span>${part2?('<br/><span class="line-b">'+part2+'</span>'):''}</span>`;
+    btn.onclick = () => selectItem(btn, item.name, 'cuenca', grid.querySelectorAll('.dept-btn'));
+    grid.appendChild(btn);
+  });
+  container.appendChild(grid);
+}
+
+function buildList(containerId, items, type) {
+  const container = document.getElementById(containerId);
+  items.forEach(item => {
+    // use a button to ensure clicks and focus work consistently
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'list-item';
+    btn.setAttribute('data-name', item.name);
+    btn.innerHTML = `<span class="icon">${item.icon}</span><span class="name">${item.name}</span><span class="tag">${item.tag}</span>`;
+    btn.onclick = () => selectItem(btn, item.name, type, container.querySelectorAll('.list-item'));
+    container.appendChild(btn);
+  });
+}
+
+function selectItem(el, name, type, peers) {
+  peers.forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedArea = name;
+  selectedAreaType = type;
+  // Mostrar la capa correspondiente en el mapa si existe
+  if (type === 'dept') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
+    // tambien mostrar cuencas que intersectan la region seleccionada
+    try { showCuencasInDept(name); } catch(e){ console.warn('showCuencasInDept error', e); }
+    // Para dept el filtro es por nombre (sin GeoJSON), renderizar de inmediato
+    try { renderTable(selectedArea); } catch(e){ console.warn('renderTable error', e); }
+  } else if (type === 'cuenca') {
+    // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
+    // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas', name);
+  } else if (type === 'zona') {
+    // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores', name);
+  }
+  // Actualizar breadcrumb
+  try {
+    document.getElementById('bc-area').textContent = name;
+    document.getElementById('map-dept-label').textContent = name.toUpperCase();
+  } catch(e){}
+}
+
+buildDeptGrid();
+// build static lists for departamentos and zonas; cuencas come from the shapefile
+// Attempt to load cuencas from server so we display all features from UH.shp
+// BUG CORREGIDO: el shapefile UH.shp tiene los campos:
+//   NOMBRE     -> nombre individual de cada cuenca (231 cuencas unicas)
+//   NOMB_UH_N1 -> region hidrografica (solo 3 valores: Pacifico, Amazonas, Titicaca)
+// El codigo anterior buscaba la primera key con 'nomb' y encontraba NOMB_UH_N1 (orden
+// alfabetico en el shapefile), mostrando solo 3 regiones en vez de 231 cuencas.
+// Ahora se prioriza explicitamente el campo 'NOMBRE' antes de buscar por patron.
+function _getCuencaName(properties) {
+  if (!properties) return null;
+  // 1) Prioridad absoluta: campo exacto 'NOMBRE' (nombre individual de la cuenca)
+  if (properties['NOMBRE'] !== undefined && properties['NOMBRE'] !== null && String(properties['NOMBRE']).trim() !== '') {
+    return String(properties['NOMBRE']).trim();
+  }
+  // 2) Variantes de nombre exacto
+  for (const exact of ['nombre', 'Name', 'name', 'CUENCA', 'cuenca']) {
+    if (properties[exact] !== undefined && properties[exact] !== null && String(properties[exact]).trim() !== '') {
+      return String(properties[exact]).trim();
+    }
+  }
+  // 3) Fallback: buscar por patron pero EXCLUIR campos que son nombres de region (NOMB_UH_N1..N7)
+  //    para no agrupar cuencas en solo 3 regiones
+  const keys = Object.keys(properties);
+  for (const k of keys) {
+    const lk = String(k).toLowerCase();
+    // Excluir campos de nivel jerarquico (NOMB_UH_N1 a N7 son regiones, no cuencas individuales)
+    if (/nomb_uh_n\d/.test(lk)) continue;
+    if (lk === 'nombre' || lk === 'name' || lk === 'cuenca') {
+      const v = properties[k];
+      if (v !== null && String(v).trim() !== '') return String(v).trim();
+    }
+  }
+  return null;
+}
+
+// Obtener la region hidrografica / tipo de cuenca (ej: 'Amazonas', 'Pacifico', 'Titicaca')
+function _getCuencaRegion(properties){
+  if (!properties) return 'OTROS';
+  // Priorizar campos que empiezan con NOMB_UH_N (niveles de jerarquía)
+  for (let i=1;i<=7;i++){
+    const k = 'NOMB_UH_N'+i;
+    if (properties[k] && String(properties[k]).trim()!=='') return String(properties[k]).trim();
+  }
+  // buscar campos típicos de region
+  const keys = Object.keys(properties||{});
+  for (const k of keys){
+    const lk = String(k).toLowerCase();
+    if (lk.includes('region') || lk.includes('reg') || lk.includes('nomb_uh')){
+      const v = properties[k]; if (v && String(v).trim()!=='') return String(v).trim();
+    }
+  }
+  // fallback a 'OTROS'
+  return 'OTROS';
+}
+
+function fetchCuencasList(){
+  const container = document.getElementById('cuencaList');
+  container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">Cargando cuencas...</div>';
+  fetch('/api/geojson?layer=cuencas').then(r => r.json()).then(geo => {
+    // Agrupar cuencas por region hidrografica
+    const groups = {}; // region -> Set(names)
+    if (geo && Array.isArray(geo.features)){
+      geo.features.forEach(f => {
+        if (!f || !f.properties) return;
+        const region = _getCuencaRegion(f.properties) || 'OTROS';
+        const name = _getCuencaName(f.properties);
+        if (!name) return;
+        if (!groups[region]) groups[region] = new Set();
+        groups[region].add(name);
+      });
+    }
+    container.innerHTML = '';
+    const regionOrder = ['Amazonas','Pacífico','Pacifico','Titicaca','OTROS'];
+    const regions = Object.keys(groups).sort((a,b)=>{
+      const ia = regionOrder.indexOf(a)>=0?regionOrder.indexOf(a):999;
+      const ib = regionOrder.indexOf(b)>=0?regionOrder.indexOf(b):999;
+      if (ia!==ib) return ia-ib; return a.localeCompare(b,'es');
+    });
+    if (regions.length === 0){
+      container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">No se encontraron cuencas en el shapefile.</div>';
+      return;
+    }
+    // Por cada region crear un bloque desplegable con sus cuencas
+    regions.forEach(region => {
+      const names = Array.from(groups[region]).sort((a,b)=> a.localeCompare(b,'es'));
+      const regionWrap = document.createElement('div');
+      regionWrap.style.marginBottom = '12px';
+      const hdr = document.createElement('div');
+      hdr.style.display='flex'; hdr.style.justifyContent='space-between'; hdr.style.alignItems='center'; hdr.style.cursor='pointer';
+      hdr.style.padding='8px 10px'; hdr.style.borderRadius='8px'; hdr.style.background='transparent'; hdr.style.border='1px solid rgba(255,255,255,0.02)';
+      // Añadir emoji de olas al encabezado de región
+      hdr.innerHTML = `<div style="font-weight:700">🌊 ${region} <span style=\"color:var(--muted);font-weight:600;margin-left:8px;font-size:0.85rem\">(${names.length})</span></div><div style=\"font-size:0.95rem;color:var(--muted)\">▸</div>`;
+      const listContainer = document.createElement('div'); listContainer.style.marginTop='8px';
+      listContainer.style.display='none';
+      listContainer.id = 'cuencas-' + region.replace(/\s+/g,'_');
+      // transformar a objetos para buildCuencaGrid
+      const items = names.map(n=> ({ name: n, icon: '🌊', tag: '' }));
+      // cuando se abra, construir la grilla si no tiene hijos
+      hdr.onclick = ()=>{
+        const open = listContainer.style.display === 'block';
+        listContainer.style.display = open ? 'none' : 'block';
+        hdr.querySelector('div:last-child').textContent = open ? '▸' : '▾';
+        if (!open && listContainer.children.length === 0){
+          buildCuencaGrid(listContainer.id, items);
+        }
+      };
+      regionWrap.appendChild(hdr);
+      regionWrap.appendChild(listContainer);
+      container.appendChild(regionWrap);
+    });
+    console.log('fetchCuencasList: cargadas regiones', regions.length);
+  }).catch(err => {
+    console.warn('Error cargando cuencas:', err);
+    container.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:0.78rem">Error al cargar cuencas.</div>';
+  });
+}
+
+// load cuencas on start
+fetchCuencasList();
+buildList('zonaList', ZONAS, 'zona');
+
+// ── TABS ──
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.sel-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  selectedAreaType = id;
+  selectedArea = null;
+  document.querySelectorAll('.dept-btn, .list-item').forEach(el => el.classList.remove('selected'));
+
+  // Mostrar la capa completa correspondiente al tab seleccionado
+  if (id === 'dept') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos');
+    document.getElementById('map-dept-label').textContent = 'TODOS LOS DEPARTAMENTOS';
+  } else if (id === 'cuenca') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas');
+    document.getElementById('map-dept-label').textContent = 'TODAS LAS CUENCAS';
+  } else if (id === 'zona') {
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores');
+    document.getElementById('map-dept-label').textContent = 'TODOS LOS SECTORES CLIMÁTICOS';
+  }
+}
+
+// ── CHIPS ──
+function toggleChip(el) { el.classList.toggle('on'); }
+function singleChip(el, group) {
+  el.closest('.chips').querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+}
+
+// ── APPLY FILTERS ──
+function applyFilters() {
+  const areaLabel = selectedArea ||
+    (selectedAreaType === 'dept' ? 'TODOS LOS DEPARTAMENTOS' :
+     selectedAreaType === 'cuenca' ? 'TODAS LAS CUENCAS' : 'TODOS LOS SECTORES');
+
+  const varEl = document.querySelector('.chips .chip.on[onclick*="var"]') ||
+                document.querySelector('#varChips .chip.on');
+  // pick from active var chip
+  const activeVar = [...document.querySelectorAll('.chips .chip.on')]
+    .find(c => ['Precipitación','Temperatura','Caudal','Humedad','Viento'].includes(c.textContent));
+  const varLabel = activeVar ? activeVar.textContent.toUpperCase() : 'PRECIPITACIÓN';
+
+  document.getElementById('bc-area').textContent = areaLabel;
+  document.getElementById('bc-var').textContent = varLabel;
+
+  updateKPIs(areaLabel);
+  renderBarChart();
+  renderLineChart();
+  renderTable(areaLabel);
+}
+
+function rnd(min, max, dec=1) { return +(Math.random()*(max-min)+min).toFixed(dec); }
+
+function updateKPIs(area) {
+  const prec = rnd(0, 80);
+  const temp = rnd(8, 34);
+  const caudal = rnd(50, 2000, 0);
+  const total = rnd(40, 120, 0);
+  const active = Math.floor(total * rnd(0.7, 1.0));
+
+  animVal('kpi-prec', 0, prec, 1);
+  animVal('kpi-temp', 0, temp, 1);
+  animVal('kpi-caudal', 0, caudal, 0);
+  animVal('kpi-est', 0, active, 0);
+  document.getElementById('kpi-est-total').textContent = total;
+
+  const up = Math.random() > 0.4;
+  document.getElementById('kpi-prec-d').textContent = (up ? '↑ +' : '↓ -') + rnd(1,20) + '% vs. período anterior';
+  document.getElementById('kpi-prec-d').className = 'kpi-delta ' + (up ? 'up' : 'down');
+  document.getElementById('kpi-temp-d').textContent = '↑ +' + rnd(0,3) + '°C vs. normal';
+  document.getElementById('kpi-caudal-d').textContent = (Math.random()>0.5?'↑':'↓') + ' ' + rnd(0,15) + '% vs. ayer';
+  document.getElementById('kpi-est-d').textContent = (active/total*100).toFixed(0) + '% operatividad';
+  document.getElementById('est-count-badge').textContent = active + ' Estaciones';
+}
+
+function animVal(id, from, to, dec) {
+  const el = document.getElementById(id);
+  const steps = 30, dur = 600;
+  let step = 0;
+  const iv = setInterval(() => {
+    step++;
+    const v = from + (to - from) * (step/steps);
+    el.textContent = v.toFixed(dec);
+    if (step >= steps) { el.textContent = to.toFixed(dec); clearInterval(iv); }
+  }, dur/steps);
+}
+
+// ── BAR CHART ──
+function renderBarChart() {
+  const svg = document.getElementById('barChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:10,b:30};
+  const vals = Array.from({length:14}, () => rnd(0, 40));
+  const max = Math.max(...vals, 1);
+  const bw = (W - pad.l - pad.r) / vals.length;
+
+  let html = `<line x1="${pad.l}" y1="${H-pad.b}" x2="${W-pad.r}" y2="${H-pad.b}" stroke="rgba(47,107,70,0.15)" stroke-width="1"/>`;
+  [0.25,0.5,0.75,1].forEach(f => {
+    const y = pad.t + (H - pad.t - pad.b) * (1 - f);
+    html += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="rgba(47,107,70,0.06)" stroke-width="1"/>`;
+    html += `<text x="${pad.l-4}" y="${y+3}" fill="#9bb29a" font-size="7" text-anchor="end">${(max*f).toFixed(0)}</text>`;
+  });
+
+  vals.forEach((v, i) => {
+    const x = pad.l + i * bw + 2;
+    const bh = (v / max) * (H - pad.t - pad.b);
+    const y = H - pad.b - bh;
+    const alpha = 0.4 + 0.6*(v/max);
+    html += `<rect x="${x}" y="${y}" width="${bw-4}" height="${bh}"
+      fill="rgba(47,107,70,${alpha})" rx="2">
+      <animate attributeName="height" from="0" to="${bh}" dur="0.5s" fill="freeze"/>
+      <animate attributeName="y" from="${H-pad.b}" to="${y}" dur="0.5s" fill="freeze"/>
+    </rect>`;
+    if (i % 2 === 0) {
+      const d = new Date(); d.setDate(d.getDate() - (13 - i));
+      html += `<text x="${x + (bw-4)/2}" y="${H-pad.b+12}" fill="#5a7a99" font-size="6.5" text-anchor="middle">${d.getDate()}/${d.getMonth()+1}</text>`;
+    }
+  });
+
+  svg.innerHTML = html;
+}
+
+// ── LINE CHART ──
+function renderLineChart() {
+  const svg = document.getElementById('lineChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:12,b:28};
+  const months = ['Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic','Ene'];
+  const vals = months.map(() => rnd(5, 90));
+  const max = Math.max(...vals);
+
+  const pts = vals.map((v, i) => {
+    const x = pad.l + i * ((W - pad.l - pad.r) / (vals.length - 1));
+    const y = pad.t + (H - pad.t - pad.b) * (1 - v/max);
+    return [x, y];
+  });
+
+  const pathD = pts.map((p, i) => (i===0?'M':'L') + p[0] + ' ' + p[1]).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0]} ${H-pad.b} L${pts[0][0]} ${H-pad.b} Z`;
+
+  let html = `<defs>
+    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6aa37f" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#2f6b46" stop-opacity="0"/>
+    </linearGradient>
+  </defs>`;
+
+  html += `<path d="${areaD}" fill="url(#areaGrad)"/>`;
+  html += `<path d="${pathD}" fill="none" stroke="#2f6b46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  pts.forEach(([x,y],i) => {
+    html += `<circle cx="${x}" cy="${y}" r="3.5" fill="#06120a" stroke="#2f6b46" stroke-width="1.5"/>`;
+    html += `<text x="${x}" y="${H-pad.b+14}" fill="#9bb29a" font-size="7.5" text-anchor="middle">${months[i]}</text>`;
+  });
+
+  [0.25,0.5,0.75,1].forEach(f => {
+    const y = pad.t + (H - pad.t - pad.b)*(1-f);
+    html += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="rgba(47,107,70,0.05)" stroke-width="1"/>`;
+    html += `<text x="${pad.l-4}" y="${y+3}" fill="#9bb29a" font-size="7" text-anchor="end">${(max*f).toFixed(0)}</text>`;
+  });
+
+  svg.innerHTML = html;
+}
+
+// ── TABLE ──
+function renderTable(area) {
+  const tbody = document.getElementById('tableBody');
+  const norm = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim(); } catch(e) { return String(x||'').toLowerCase().trim(); } };
+  // Use spatially filtered stations if available (set by fetchAndShowLayer)
+  let filtered = (CURRENT_VISIBLE_STATIONS !== null) ? CURRENT_VISIBLE_STATIONS.slice() : STATIONS_POOL.slice();
+  // Only apply name-based filtering when we don't have a spatial override
+  if (CURRENT_VISIBLE_STATIONS === null && area && area !== 'TODOS' && area !== 'TODAS LAS CUENCAS' && area !== 'TODOS LOS DEPARTAMENTOS'){
+    const tgt = norm(area);
+    if (selectedAreaType === 'dept'){
+      filtered = filtered.filter(s => s && s.dept && norm(s.dept) === tgt);
+    } else if (selectedAreaType === 'cuenca'){
+      // BUG CORREGIDO: el shapefile tiene nombres como "Cuenca Alamor" / "Intercuenca Alto Yurua"
+      // pero la Maestra de estaciones tiene "Alamor" / "Alto Yurua" en UNIDAD_HIDROGRAFICA.
+      // Se usa matching bidireccional: el nombre del shapefile contiene el de la estacion O viceversa.
+      filtered = filtered.filter(s => {
+        if (!s || !s.cuenca) return false;
+        const sc = norm(s.cuenca);
+        // Coincidencia exacta
+        if (sc === tgt) return true;
+        // El nombre del shapefile contiene el nombre de la estacion (ej: "cuenca alamor" contiene "alamor")
+        if (tgt.includes(sc) && sc.length > 3) return true;
+        // El nombre de la estacion contiene el del shapefile
+        if (sc.includes(tgt) && tgt.length > 3) return true;
+        return false;
+      });
+    } else if (selectedAreaType === 'zona'){
+      // zona matching: try to match zona name in station properties if present
+      filtered = filtered.filter(s => s && (norm(s.cuenca||'').includes(tgt) || norm(s.dept||'').includes(tgt)));
+    }
+  }
+
+  // update map markers to show only filtered stations
+  try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(filtered); } catch(e){ console.warn('plotStationsOnMap error', e); }
+
+  tbody.innerHTML = filtered.map(s => {
+    // Color del dot de tipo segun tipo de estacion
+    const tipoNormTbl = (s.tipo||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
+    const typeClass = tipoNormTbl.includes('conv') ? 's-rt' : 's-auto';
+    const prec = (typeof s.prec === 'number') ? s.prec.toFixed(1) : (s.prec?String(s.prec):'0');
+    const temp = (typeof s.temp === 'number') ? s.temp.toFixed(1) : (s.temp?String(s.temp):'0');
+    const act = (typeof s.act === 'number') ? s.act : (s.act?Number(s.act):80);
+    const escaped = (s.name||'').replace(/'/g,"\\'");
+    const hasCoords = (s.lat != null && s.lon != null);
+    const viewBtn = hasCoords ? `<button class="view-btn" title="Ver en mapa" onclick="focusStationOnMap('${escaped}')">&#x1F5FA;</button>` : `<span style="font-size:0.78rem;color:var(--muted)">Sin coords</span>`;
+    const savedHtml = s._saved_path ? `<button class="view-saved-btn" onclick="previewSavedData('${escaped}')" style="background:none;border:0;color:var(--accent2);font-weight:600;cursor:pointer">Descargado</button>` : '';
+    // Color y texto del estado operativo
+    const estadoOp = s.estadoOp || 'DESCONOCIDO';
+    let estadoColor, estadoBg, estadoIcon, estadoLabel;
+    if (estadoOp === 'OPERATIVA') {
+      estadoColor = '#22c55e'; estadoBg = 'rgba(34,197,94,0.12)'; estadoIcon = '✅'; estadoLabel = 'Operativa';
+    } else if (estadoOp === 'PARCIALMENTE OPERATIVA' || estadoOp === 'PARCIAL') {
+      estadoColor = '#f59e0b'; estadoBg = 'rgba(245,158,11,0.12)'; estadoIcon = '⚠️'; estadoLabel = 'Parcial';
+    } else if (estadoOp === 'INACTIVA' || estadoOp === 'CLAUSURADA' || estadoOp === 'SUSPENDIDA') {
+      estadoColor = '#ef4444'; estadoBg = 'rgba(239,68,68,0.10)'; estadoIcon = '🔴'; estadoLabel = estadoOp === 'INACTIVA' ? 'Inactiva' : estadoOp === 'CLAUSURADA' ? 'Clausurada' : 'Suspendida';
+    } else {
+      estadoColor = '#6b7280'; estadoBg = 'rgba(107,114,128,0.10)'; estadoIcon = '❓'; estadoLabel = estadoOp;
+    }
+    const estadoBadge = `<span style="display:inline-flex;align-items:center;gap:4px;background:${estadoBg};color:${estadoColor};border:1px solid ${estadoColor}33;border-radius:999px;padding:2px 8px;font-size:0.62rem;font-weight:700;letter-spacing:0.03em;white-space:nowrap">${estadoIcon} ${estadoLabel}</span>`;
+    return `<tr>
+      <td style="color:var(--text);font-weight:500;display:flex;align-items:center;gap:8px">${s.name || ''}</td>
+      <td><span class="status-dot ${typeClass}"></span>${s.tipo || ''}</td>
+      <td style="color:var(--muted)">${s.dept || ''}</td>
+      <td style="color:var(--muted)">${s.cuenca || ''}</td>
+      <td>${estadoBadge}</td>
+      <td style="display:flex;gap:8px;align-items:center;justify-content:flex-end">${viewBtn}${ savedHtml ? savedHtml : '' }<button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar historial</button><span class="dl-status" style="margin-left:8px"></span></td>
+    </tr>`;
+  }).join('');
+}
+
+// Preview saved output and optionally use it in dashboard
+function previewSavedData(stationName){
+  if (!stationName) return;
+  const modal = buildPreviewModal();
+  modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Cargando preview...</div>';
+  modal.show();
+  fetch('/api/output_preview?station='+encodeURIComponent(stationName)).then(r=>r.json()).then(j=>{
+    if (!j || !j.found){ modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">No se encontró archivo guardado.</div>'; return; }
+    const lines = [];
+    lines.push(`<div style="font-weight:700;margin-bottom:6px">${j.file}</div>`);
+    lines.push(`<div style="font-size:0.9rem;color:var(--muted)">Filas: ${j.rows} · Columnas: ${j.columns.length} ${j.date_min?('· Fecha: '+j.date_min+' → '+j.date_max):''}</div>`);
+    if (j.monthly && Array.isArray(j.monthly) && j.monthly.length){
+      lines.push('<div style="margin-top:8px;font-weight:600">Serie mensual (muestra)</div>');
+      const mm = j.monthly.slice(-12).map(m=> `<div style="display:flex;justify-content:space-between;padding:2px 0"><span style="color:var(--muted)">${m.period}</span><span>${m.value!==null?m.value.toFixed(2):'-'}</span></div>`).join('');
+      lines.push(`<div style="max-height:220px;overflow:auto;margin-top:6px">${mm}</div>`);
+    }
+    if (j.sample && j.sample.length){
+      const tbl = ['<table style="width:100%;border-collapse:collapse;margin-top:8px">'];
+      tbl.push('<thead><tr>' + j.columns.slice(0,6).map(c=>`<th style="text-align:left;padding:6px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.78rem;color:var(--muted)">${c}</th>`).join('') + '</tr></thead>');
+      tbl.push('<tbody>');
+      j.sample.forEach(r=>{ tbl.push('<tr>' + j.columns.slice(0,6).map(c=>`<td style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.02);font-size:0.82rem">${String(r[c]||'')}</td>`).join('') + '</tr>'); });
+      tbl.push('</tbody></table>');
+      lines.push(tbl.join(''));
+    }
+    modal.querySelector('.modal-body').innerHTML = lines.join('');
+    const footer = modal.querySelector('.modal-footer'); footer.innerHTML = '';
+    const useBtn = document.createElement('button'); useBtn.className='apply-btn'; useBtn.textContent='Usar en dashboard';
+    useBtn.onclick = ()=>{ modal.hide(); applySavedToDashboard(j); };
+    footer.appendChild(useBtn);
+    const dl = document.createElement('a'); dl.href = '/'+ String(j.path).replace(/\\/g,'/'); dl.target='_blank'; dl.textContent='Abrir fichero'; dl.style.marginLeft='8px'; dl.style.color='var(--muted)'; footer.appendChild(dl);
+  }).catch(err=>{ modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Error al cargar preview.</div>'; console.warn(err); });
+}
+
+function applySavedToDashboard(preview){
+  // store current saved data summary and monthly series
+  window.CURRENT_SAVED = preview || null;
+  // update KPIs using sample stats if available
+  if (preview && preview.monthly && preview.monthly.length){
+    const vals = preview.monthly.map(m=>m.value).filter(v=>v!=null);
+    const prec = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
+    animVal('kpi-prec', 0, prec, 1);
+    animVal('kpi-temp', 0, prec/3, 1);
+    animVal('kpi-caudal', 0, prec*10, 0);
+    animVal('kpi-est', 0, Math.min(120, Math.round((preview.rows/10)||50)), 0);
+    document.getElementById('kpi-est-total').textContent = Math.max(1, Math.round(preview.rows/10));
+    document.getElementById('kpi-prec-d').textContent = 'Datos cargados desde archivo';
+  }
+  // update charts to show monthly if present
+  try{ renderBarChartWithData(preview && preview.monthly ? preview.monthly.slice(-14) : null); }catch(e){ console.warn(e); }
+  try{ renderLineChartWithData(preview && preview.monthly ? preview.monthly.slice(-12) : null); }catch(e){ console.warn(e); }
+}
+
+function buildPreviewModal(){
+  let modal = document.getElementById('savedPreviewModal');
+  if (!modal){
+    modal = document.createElement('div'); modal.id='savedPreviewModal'; modal.className='modal';
+    modal.innerHTML = `<div class="modal-box" style="width:720px;max-width:96%"><div class="modal-header" style="display:flex;justify-content:space-between;align-items:center"><div style="font-weight:700">Preview guardado</div><button class="close-modal">✕</button></div><div class="modal-body" style="padding:12px"></div><div class="modal-footer" style="padding:12px;display:flex;justify-content:flex-end;gap:8px"></div></div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('.close-modal').onclick = ()=>modal.hide();
+    modal.show = function(){ this.style.display='block'; this.style.position='fixed'; this.style.left=0; this.style.top=0; this.style.right=0; this.style.bottom=0; this.style.background='rgba(0,0,0,0.6)'; this.querySelector('.modal-box').style.margin='6% auto'; };
+    modal.hide = function(){ this.style.display='none'; };
+    modal.style.display='none';
+  }
+  return modal;
+}
+
+// chart renderers that accept data
+function renderBarChartWithData(monthly){
+  if (!monthly || !monthly.length) return renderBarChart();
+  const svg = document.getElementById('barChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:10,b:30};
+  const vals = monthly.map(m=> m.value || 0);
+  const max = Math.max(...vals, 1);
+  const bw = (W - pad.l - pad.r) / vals.length;
+  let html = `<line x1="${pad.l}" y1="${H-pad.b}" x2="${W-pad.r}" y2="${H-pad.b}" stroke="rgba(47,107,70,0.15)" stroke-width="1"/>`;
+  vals.forEach((v, i) => {
+    const x = pad.l + i * bw + 2;
+    const bh = (v / max) * (H - pad.t - pad.b);
+    const y = H - pad.b - bh;
+    html += `<rect x="${x}" y="${y}" width="${bw-4}" height="${bh}" fill="rgba(47,107,70,0.6)" rx="2"></rect>`;
+    if (i % 2 === 0){ html += `<text x="${x + (bw-4)/2}" y="${H-pad.b+12}" fill="#5a7a99" font-size="6.5" text-anchor="middle">${monthly[i].period}</text>`; }
+  });
+  svg.innerHTML = html;
+}
+
+function renderLineChartWithData(monthly){
+  if (!monthly || !monthly.length) return renderLineChart();
+  const svg = document.getElementById('lineChart');
+  const W = 320, H = 130, pad = {l:30,r:10,t:12,b:28};
+  const vals = monthly.map(m=> m.value || 0);
+  const months = monthly.map(m=> m.period.split('-').slice(-1)[0]);
+  const max = Math.max(...vals, 1);
+  const pts = vals.map((v, i) => { const x = pad.l + i * ((W - pad.l - pad.r) / (vals.length - 1)); const y = pad.t + (H - pad.t - pad.b) * (1 - v/max); return [x,y]; });
+  const pathD = pts.map((p,i)=>(i===0?'M':'L')+p[0]+' '+p[1]).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0]} ${H-pad.b} L${pts[0][0]} ${H-pad.b} Z`;
+  let html = `<defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6aa37f" stop-opacity="0.25"/><stop offset="100%" stop-color="#2f6b46" stop-opacity="0"/></linearGradient></defs>`;
+  html += `<path d="${areaD}" fill="url(#areaGrad)"/>`;
+  html += `<path d="${pathD}" fill="none" stroke="#2f6b46" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  pts.forEach(([x,y],i)=>{ html += `<circle cx="${x}" cy="${y}" r="3.5" fill="#06120a" stroke="#2f6b46" stroke-width="1.5"/>`; html += `<text x="${x}" y="${H-pad.b+14}" fill="#9bb29a" font-size="7.5" text-anchor="middle">${months[i]}</text>`; });
+  svg.innerHTML = html;
+}
+
+// Download historical data for a station via server endpoint and show status in the row
+function _triggerFileSave(j, stationName, btn, statusEl, prevBtnText, spinner){
+  const restore = () => {
+    btn.innerHTML = prevBtnText;
+    btn.style.minWidth = '';
+    btn.disabled = false; btn.classList.remove('loading');
+    try { statusEl.removeChild(spinner); } catch(e){}
+  };
+  restore();
+  if (j && j.saved){
+    let dl = j.download_url || (j.file ? ('/api/download_output?file=' + encodeURIComponent(j.file)) : null);
+    if (!dl){ statusEl.textContent = 'Guardado'; return; }
+    if (dl.startsWith('/')) dl = (location.origin || '') + dl;
+    fetch(dl).then(res => {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.blob();
+    }).then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = j.file || (stationName + '.xlsx');
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      statusEl.textContent = '✓ Descargado'; statusEl.style.color = 'var(--accent2)';
+    }).catch(err => {
+      statusEl.textContent = 'Error descarga'; statusEl.style.color = 'var(--warn)';
+    });
+  } else {
+    const msg = (j && j.error) ? j.error : 'Error';
+    statusEl.textContent = msg; statusEl.style.color = 'var(--warn)';
+  }
+}
+
+function _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner){
+  fetch('/api/job_status/' + jobId)
+    .then(r => r.json())
+    .then(j => {
+      if (j.status === 'pending'){
+        setTimeout(() => _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner), 2000);
+      } else if (j.status === 'done'){
+        _triggerFileSave(j.result, stationName, btn, statusEl, prevBtnText, spinner);
+      } else {
+        const msg = j.error || 'Error en descarga';
+        btn.innerHTML = prevBtnText; btn.style.minWidth = ''; btn.disabled = false; btn.classList.remove('loading');
+        try { statusEl.removeChild(spinner); } catch(e){}
+        statusEl.textContent = msg; statusEl.style.color = 'var(--warn)';
+      }
+    }).catch(() => {
+      setTimeout(() => _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner), 3000);
+    });
+}
+
+function downloadStation(stationName, btn){
+  if (!stationName) return;
+  let statusEl = btn.parentNode.querySelector('.dl-status');
+  if (!statusEl) {
+    statusEl = document.createElement('span');
+    statusEl.className = 'dl-status';
+    statusEl.style.marginLeft = '6px';
+    try { btn.parentNode.appendChild(statusEl); } catch(e){}
+  }
+  btn.disabled = true; btn.classList.add('loading');
+  const prevBtnText = btn.innerHTML;
+  btn.innerHTML = '😉 Espera un ratón...';
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  const spinner = document.createElement('span');
+  spinner.className = 'spinner';
+  statusEl.innerHTML = '';
+  statusEl.appendChild(spinner);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const payload = { station_name: stationName, from_date: '2000-01-01', to_date: today, use_local: true };
+  if (btn.dataset.cod)    payload.station_code    = btn.dataset.cod;
+  if (btn.dataset.tipo)   payload.tipo            = btn.dataset.tipo;
+  if (btn.dataset.estado) payload.estado_operativo= btn.dataset.estado;
+  if (btn.dataset.ico)    payload.ico             = btn.dataset.ico;
+
+  fetch('/api/save_by_name', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+    .then(r => r.json())
+    .then(j => {
+      if (j.job_id){
+        // Descarga asíncrona — comenzar polling
+        _pollJobStatus(j.job_id, stationName, btn, statusEl, prevBtnText, spinner);
+      } else {
+        // Respuesta inmediata (error de portal o respuesta síncrona de fallback)
+        const restore = () => {
+          btn.innerHTML = prevBtnText; btn.style.minWidth = '';
+          btn.disabled = false; btn.classList.remove('loading');
+          try { statusEl.removeChild(spinner); } catch(e){}
+        };
+        setTimeout(restore, 1500);
+        if (j.saved){
+          _triggerFileSave(j, stationName, btn, statusEl, prevBtnText, spinner);
+        } else {
+          const msg = (j && j.error) ? j.error : 'Error';
+          setTimeout(() => { statusEl.textContent = msg; statusEl.style.color = 'var(--warn)'; }, 1500);
+        }
+      }
+    }).catch(err=>{
+      btn.innerHTML = prevBtnText; btn.style.minWidth = '';
+      btn.disabled = false; btn.classList.remove('loading');
+      try { statusEl.removeChild(spinner); } catch(e){}
+      statusEl.textContent = String(err || 'Error de red'); statusEl.style.color = 'var(--warn)';
+      console.warn('downloadStation error', err);
+    });
+}
+
+// Toggle left shift of the wide table card so user can reveal the right side
+function toggleTableShift(){
+  const card = document.querySelector('.chart-card.wide');
+  const btn = document.getElementById('toggleShiftBtn');
+  if (!card) return;
+  const isShifted = card.classList.toggle('shift-left');
+  btn.textContent = isShifted ? 'Mostrar todo' : 'Mostrar barra';
+  // small UX: scroll table to left when showing all
+  if (isShifted){ const wrap = document.querySelector('.table-wrap'); if (wrap) wrap.scrollLeft = 0; }
+}
+
+// ── LEAFLET MAP: inicialización y trazado de estaciones (usa imagen satelital ESRI)
+let leafletMap = null;
+let stationsLayer = null;
+// Colores por tipo y estado:
+//   Convencional activa  => verde  (#6aa37f)
+//   Automatica activa    => azul   (#4da6ff)
+//   Inactiva (cualquier tipo) => gris oscuro (#888888)
+//   Parcialmente activa  => naranja (#d4853a)
+const TYPE_COLOR = {
+  'convencional': '#6aa37f',
+  'automatica':   '#4da6ff',
+  'inactiva':     '#888888',
+  'parcial':      '#d4853a'
+};
+// Tamaño de los puntos de estaciones (ajustar a gusto)
+let STATION_RADIUS = 5;
+
+function setStationRadius(r){
+  try{ STATION_RADIUS = Number(r) || 1; }catch(e){ STATION_RADIUS = 2; }
+  try{ if (CURRENT_VISIBLE_STATIONS && CURRENT_VISIBLE_STATIONS.length) plotStationsOnMap(CURRENT_VISIBLE_STATIONS); else plotStationsOnMap(STATIONS_POOL); }catch(e){}
+}
+
+function initLeaflet() {
+  if (leafletMap) return;
+  // Límites geográficos de Perú (con margen pequeño)
+  const PERU_BOUNDS = L.latLngBounds(
+    L.latLng(-19.5, -82.5),  // SW
+    L.latLng(0.5,  -68.0)    // NE
+  );
+  leafletMap = L.map('leafletMap', {
+    zoomControl: true,
+    minZoom: 5,
+    maxZoom: 16,
+    maxBounds: PERU_BOUNDS,
+    maxBoundsViscosity: 1.0   // impide arrastrar fuera de Perú
+  }).setView([-9.3, -75.0], 5);
+
+  // OpenStreetMap como capa por defecto (base)
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(leafletMap);
+
+  // ESRI WorldImagery (satélite) como alternativa
+  const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+  });
+
+  const baseMaps = { 'OSM': osm, 'Satellite (Esri)': esri };
+  L.control.layers(baseMaps).addTo(leafletMap);
+
+  // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
+  try {
+    if (!leafletMap.getPane('stationsPane')) {
+      leafletMap.createPane('stationsPane');
+      const p = leafletMap.getPane('stationsPane');
+      p.style.zIndex = 650; // por encima de overlay pane
+      p.style.pointerEvents = 'auto';
+    }
+    // Controles de depuración deshabilitados en producción
+  } catch(e) { /* ignore if not supported */ }
+
+  stationsLayer = L.layerGroup().addTo(leafletMap);
+}
+
+// GEOJSON cache helper
+const GEO_CACHE = {};
+function loadGeo(layer){
+  if (GEO_CACHE[layer]) return Promise.resolve(GEO_CACHE[layer]);
+  return fetch('/api/geojson?layer='+encodeURIComponent(layer)).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
+}
+
+// Mostrar cuencas que intersectan un departamento seleccionado
+function showCuencasInDept(deptName){
+  const out = document.getElementById('deptSublist');
+  out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Buscando cuencas...</div>';
+  Promise.all([loadGeo('departamentos'), loadGeo('cuencas')]).then(([depts, cuencas]) => {
+    if (!depts || !Array.isArray(depts.features) || !cuencas || !Array.isArray(cuencas.features)){
+      out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No hay datos geográficos.</div>';
+      return;
+    }
+    // encontrar feature del depto por matching de propiedades (más tolerante)
+    function norm(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
+    const target = norm(deptName);
+    let deptFeat = null;
+    // 1) exact equality
+    deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v)===target));
+    // 2) inclusion (property contains deptName)
+    if (!deptFeat) deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v).includes(target)));
+    // 3) token overlap (split words)
+    if (!deptFeat){
+      const toks = target.split(/\s+/).filter(Boolean);
+      deptFeat = depts.features.find(f=>{
+        if (!f || !f.properties) return false;
+        const vals = Object.values(f.properties).map(v=>norm(v));
+        return toks.every(t=> vals.some(v=> v.includes(t)));
+      });
+    }
+    if (!deptFeat){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Departamento no encontrado en capas.</div>'; return; }
+
+    const found = [];
+    cuencas.features.forEach(cf=>{
+      try{
+        const intersects = turf.booleanIntersects(deptFeat, cf);
+        if (intersects){
+          // Usar _getCuencaName para consistencia: prioriza campo NOMBRE (cuencas individuales)
+          const nm = _getCuencaName(cf.properties || {});
+          if (nm) found.push(nm);
+        }
+      }catch(e){ /* ignore feature errors */ }
+    });
+    const uniq = Array.from(new Set(found)).sort((a,b)=> a.localeCompare(b,'es'));
+    if (!uniq.length){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No se encontraron cuencas dentro del departamento.</div>'; return; }
+    // Also render the intersecting cuencas on the map as a separate overlay
+    try {
+      // remove previous dept cuencas layer
+      if (layerGroups.cuencas_dept) { try { leafletMap.removeLayer(layerGroups.cuencas_dept); } catch(e){}; layerGroups.cuencas_dept = null; }
+      // filter original cuencas.features to those that intersect the deptFeat
+      const matchedFeatures = cuencas.features.filter(cf => {
+        try { return turf.booleanIntersects(deptFeat, cf); } catch(e){ return false; }
+      });
+      if (matchedFeatures && matchedFeatures.length) {
+        const geo = { type: 'FeatureCollection', features: matchedFeatures };
+        layerGroups.cuencas_dept = L.geoJSON(geo, { style: { color: '#5fcf8d', weight: 2, fillColor: '#9ff0be', fillOpacity: 0.25 } }).addTo(leafletMap);
+        try { leafletMap.fitBounds(layerGroups.cuencas_dept.getBounds().pad(0.12)); } catch(e){}
+      }
+    } catch(e) { console.warn('Error mostrando cuencas en mapa', e); }
+
+    // render small buttons
+    out.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.style.display='grid'; wrap.style.gridTemplateColumns='1fr'; wrap.style.gap='6px';
+    uniq.forEach(nm=>{
+      const b = document.createElement('button');
+      b.className='dept-btn';
+      b.style.fontSize='0.78rem';
+      b.textContent = nm;
+      b.onclick = ()=>{
+        // select as cuenca
+        // remove selected on cuenca list and set selection
+        document.querySelectorAll('#cuencaList .dept-btn').forEach(el=>el.classList.remove('selected'));
+        b.classList.add('selected');
+        selectedArea = nm; selectedAreaType='cuenca';
+        fetchAndShowLayer('cuencas', nm);
+      };
+      wrap.appendChild(b);
+    });
+    out.appendChild(wrap);
+  }).catch(err=>{ console.warn('showCuencasInDept error', err); out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Error buscando cuencas.</div>'; });
+}
+
+function plotStationsOnMap(stations) {
+  if (!leafletMap) initLeaflet();
+  stationsLayer.clearLayers();
+  const markers = [];
+  const countWithCoords = stations.filter(s => s && s.lat != null && s.lon != null).length;
+  console.log('plotStationsOnMap -> total stations=', stations.length, 'with coords=', countWithCoords);
+  let countByType = { automatica: 0, convencional: 0, other: 0 };
+  const debugSamples = [];
+  stations.forEach((s, si) => {
+    if (s.lat == null || s.lon == null) return;
+    // Determinar color del marcador segun tipo Y estado operativo:
+    //   - INACTIVA o CLAUSURADA o SUSPENDIDA => gris (#888888)
+    //   - PARCIALMENTE activa               => naranja (#d4853a)
+    //   - Convencional operativa            => verde (#6aa37f)
+    //   - Automatica operativa              => azul (#4da6ff)
+    function normalizeStr(x){
+      try { return (x||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(); }
+      catch(e){ return (x||'').toString().toLowerCase(); }
+    }
+    const estadoNorm = normalizeStr(s.estadoOp || '');
+    const tipoNorm = normalizeStr(s.tipo);
+    let tipoKey;
+    if (estadoNorm === 'inactiva' || estadoNorm.indexOf('clausur') !== -1 || estadoNorm.indexOf('suspend') !== -1) {
+      tipoKey = 'inactiva';
+    } else if (estadoNorm === 'parcial' || estadoNorm.indexOf('parcial') !== -1) {
+      tipoKey = 'parcial';
+    } else if (tipoNorm.indexOf('conv') !== -1) {
+      tipoKey = 'convencional';
+    } else if (tipoNorm.indexOf('auto') !== -1) {
+      tipoKey = 'automatica';
+    } else {
+      tipoKey = 'convencional'; // fallback
+    }
+    const color = TYPE_COLOR[tipoKey] || '#6aa37f';
+    if (tipoKey in countByType) countByType[tipoKey]++; else countByType.other++;
+    if (si < 40) debugSamples.push({ idx: si, name: s.name, tipo_raw: s.tipo || null, estadoOp: s.estadoOp || null, tipoKey, color });
+    const opts = { radius: STATION_RADIUS, color: '#111827', weight:0.8, fillColor: color, fillOpacity:0.95 }; 
+    try { opts.pane = 'stationsPane'; } catch(e){}
+    const marker = L.circleMarker([s.lat, s.lon], opts);
+    const popup = `<div style="font-weight:600;color:${color}">${s.name}</div><div style="font-size:0.85rem;color:#99b7d1">${s.dept || ''} · ${s.cuenca || ''}</div><div style="margin-top:6px">Prec: <strong>${s.prec} mm</strong><br>Temp: <strong>${s.temp} °C</strong></div>`;
+    marker.bindPopup(popup);
+    marker.on('click', () => {
+      document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
+      updateKPIs(s.dept || 'ÁREA');
+      renderTable(s.dept || 'ÁREA');
+    });
+    marker.addTo(stationsLayer);
+    try { if (marker.bringToFront) marker.bringToFront(); } catch(e){}
+    markers.push(marker);
+  });
+  // fitBounds se maneja externamente (fetchAndShowLayer) para no competir con el zoom de polígono
+  console.log('plotStationsOnMap -> markers=', markers.length);
+  console.log('plotStationsOnMap -> counts by type', countByType);
+  if (debugSamples.length) {
+    try { console.log('plotStationsOnMap -> debugSamples (first 40)'); console.table(debugSamples.slice(0,20)); } catch(e) { console.log(debugSamples); }
+  }
+  // actualizar contador visual en el badge del mapa
+  try { document.getElementById('map-dept-label').textContent = (markers.length ? markers.length + ' Estaciones' : document.getElementById('map-dept-label').textContent); } catch(e){}
+  try { const badge = document.getElementById('markerCountBadge'); if(badge) badge.textContent = markers.length + ' puntos'; } catch(e){}
+  try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
+  // asegurar capa de estaciones en primer plano
+  try {
+    if (stationsLayer && stationsLayer.addTo) stationsLayer.addTo(leafletMap);
+    if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront();
+  } catch(e) { /* noop */ }
+}
+
+// Layer groups for exclusive display of shapefile layers
+const layerGroups = {
+  departamentos: null,
+  cuencas: null,
+  sectores: null,
+  cuencas_dept: null
+};
+
+function clearAllOverlays() {
+  if (!leafletMap) return;
+  for (const k in layerGroups) {
+    if (layerGroups[k]) {
+      try { leafletMap.removeLayer(layerGroups[k]); } catch(e){}
+      layerGroups[k] = null;
+    }
+  }
+}
+
+function fetchAndShowLayer(layer, name) {
+  if (!leafletMap) initLeaflet();
+
+  // Remove any other layer groups so only the selected one remains
+  for (const k in layerGroups) {
+    if (k !== layer && layerGroups[k]) {
+      try { leafletMap.removeLayer(layerGroups[k]); } catch(e){}
+      layerGroups[k] = null;
+    }
+  }
+
+  const url = '/api/geojson?layer=' + encodeURIComponent(layer) + (name?('&name='+encodeURIComponent(name)):'');
+  fetch(url).then(r => r.json()).then(geo => {
+    if (!geo || !geo.features || geo.features.length === 0) return;
+
+    // replace existing group for this layer
+    if (layerGroups[layer]) {
+      try { leafletMap.removeLayer(layerGroups[layer]); } catch(e){}
+      layerGroups[layer] = null;
+    }
+
+    // Default styles for each layer (subtle)
+    const defaultStyle = (layer === 'departamentos') ? { color: '#2f6b46', weight: 2, fillOpacity: 0.06, fillColor: '#2f6b46' }
+      : (layer === 'cuencas') ? { color: '#4b7f5f', weight: 2, fillOpacity: 0.06, fillColor: '#4b7f5f' }
+      : { color: '#3e6b56', weight: 2, fillOpacity: 0.06, fillColor: '#3e6b56' };
+
+    // Highlight style when a specific feature is requested (light green translucent)
+    const highlightStyle = { color: '#5fcf8d', weight: 2, fillColor: '#9ff0be', fillOpacity: 0.35 };
+
+    // choose style depending on whether a specific name was requested
+    const layerStyle = name ? highlightStyle : defaultStyle;
+
+    layerGroups[layer] = L.geoJSON(geo, {
+      style: layerStyle,
+      onEachFeature: function(f, lyr) {
+        let title = '';
+        if (layer === 'cuencas') {
+          // Para cuencas usar _getCuencaName para obtener nombre individual (campo NOMBRE)
+          title = _getCuencaName(f.properties || '') || '';
+        } else {
+          for (const k in f.properties) {
+            const lk = String(k).toLowerCase();
+            if (lk.includes('name') || lk.includes('nombre') || lk.includes('depart') || lk.includes('dpto') || lk.includes('prov') || lk.includes('est')) { title = f.properties[k]; break; }
+          }
+        }
+        lyr.bindPopup(title || 'Area');
+      }
+    }).addTo(leafletMap);
+
+    // Si se ha solicitado un nombre concreto, filtrar estaciones espacialmente y mostrarlas
+    try {
+      if (name && geo.features && geo.features.length) {
+        const inside = STATIONS_POOL.filter(s => {
+          try {
+            if (s.lat == null || s.lon == null) return false;
+            const pt = turf.point([Number(s.lon), Number(s.lat)]);
+            return geo.features.some(f => { try { return turf.booleanPointInPolygon(pt, f); } catch(e) { return false; } });
+          } catch(e) { return false; }
+        });
+        CURRENT_VISIBLE_STATIONS = inside;
+        plotStationsOnMap(inside);
+        try { renderTable(); } catch(e){ console.warn('renderTable error after spatial filter', e); }
+      } else {
+        CURRENT_VISIBLE_STATIONS = null;
+        plotStationsOnMap(STATIONS_POOL);
+        try { renderTable(); } catch(e){ console.warn('renderTable error reset', e); }
+      }
+    } catch(e) { console.warn('filter stations by geo error', e); }
+
+    // asegurarse que la capa de estaciones quede encima de las polígonos
+    try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e) { /* noop */ }
+
+    try { leafletMap.fitBounds(layerGroups[layer].getBounds().pad(0.1)); } catch(e){}
+  }).catch(err => console.warn('geojson load error', err));
+}
+
+// ── INIT ──
+// Centrar mapa en una estación por nombre (usa `STATIONS_POOL`)
+function focusStationOnMap(stationName){
+  if (!stationName) return;
+  const s = STATIONS_POOL.find(x => x && (x.name === stationName || String(x.name||'').trim() === String(stationName||'').trim()));
+  if (!s){
+    alert('Estación no encontrada en la lista local.');
+    return;
+  }
+  if (s.lat == null || s.lon == null){
+    alert('La estación no tiene coordenadas disponibles para mostrar en el mapa.');
+    return;
+  }
+  if (!leafletMap) initLeaflet();
+  try{
+    leafletMap.setView([s.lat, s.lon], 12);
+    const popupHtml = `<div style="font-weight:600">${s.name}</div><div style="font-size:0.9rem;color:#99b7d1">${s.dept || ''} · ${s.cuenca || ''}</div>`;
+    L.popup({closeOnClick:true, autoClose:true}).setLatLng([s.lat, s.lon]).setContent(popupHtml).openOn(leafletMap);
+  }catch(e){
+    console.warn('focusStationOnMap error', e);
+  }
+}
+
+applyFilters();
+
+// Volver a la vista normal: todas las estaciones, sin filtros
+function resetToNormalView(){
+  CURRENT_VISIBLE_STATIONS = null;
+  selectedArea = null;
+  selectedAreaType = null;
+  // Quitar selección visual de botones
+  document.querySelectorAll('.dept-btn.selected, .list-item.selected').forEach(el => el.classList.remove('selected'));
+  // Quitar capas de polígonos del mapa
+  if (typeof layerGroups !== 'undefined') {
+    for (const k in layerGroups) {
+      if (layerGroups[k]) { try { leafletMap.removeLayer(layerGroups[k]); } catch(e){} layerGroups[k] = null; }
+    }
+  }
+  if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+  if (typeof renderTable === 'function') renderTable();
+}
+
+// Download all stations from Maestra (heavy operation). Shows modal with results.
+function processAllFromMaestra(){
+  // Mostrar modal con listado de estaciones desde el archivo Maestra local
+  const btn = document.getElementById('downloadMaestraBtn');
+  btn.disabled = true; btn.textContent = 'Cargando...';
+  const modal = buildPreviewModal(); modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">Cargando estaciones desde la Maestra local...</div>'; modal.show();
+  // Pedir explícitamente al servidor la lista local (endpoint dedicado)
+  fetch('/api/maestra_list')
+    .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`status:${r.status} ${t}`)))
+    .then(resp => {
+      if(!resp || resp.ok !== true){
+        throw new Error(resp && resp.error ? resp.error : 'no data');
+      }
+      const list = resp.stations || [];
+      btn.disabled = false; btn.textContent = 'Datos meteorológicos';
+      if (!Array.isArray(list) || list.length === 0){
+        modal.querySelector('.modal-body').innerHTML = '<div style="padding:12px;color:var(--muted)">No se encontraron estaciones en la Maestra local.</div>';
+        return;
+      }
+      // Construir tabla con botones Ver en mapa y Descargar por estación
+      // Además, mostrar todos los puntos de la Maestra en el mapa
+      try{
+        const parseCoord = v => { if(v===null||v===undefined) return null; const s=String(v).trim(); if(s==='') return null; const cleaned = s.replace(/,/g,'.'); const n=parseFloat(cleaned); return Number.isFinite(n)? n : null; };
+        const mapped = list.map(st => ({
+          name: st.name||st.NOMBRE_ESTACION||st.estacion||st.nombre||'ND',
+          tipo: st.tipo||st.categoria||'ND',
+          dept: st.dept||st.departamento||st.DEPARTAMENTO||'ND',
+          cuenca: st.cuenca||'ND',
+          prec: 0, temp:0, act:0,
+          lat: parseCoord(st.lat||st.LATITUD||st.Latitud||st.Y),
+          lon: parseCoord(st.lon||st.LONGITUD||st.Longitud||st.X),
+          cod: st.cod||st.COD||st.codigo||null
+        })).filter(x=> x.lat!==null && x.lon!==null);
+        if(mapped.length > 0){ CURRENT_VISIBLE_STATIONS = mapped; if(typeof plotStationsOnMap === 'function'){ plotStationsOnMap(mapped); } if(typeof renderTable === 'function'){ renderTable(); } }
+      }catch(e){ console.warn('error mostrando Maestra en mapa', e); }
+      const container = document.createElement('div');
+      container.style.display = 'flex'; container.style.flexDirection = 'column'; container.style.gap = '8px';
+      const hdr = document.createElement('div'); hdr.style.fontWeight = '700'; hdr.textContent = `Estaciones en Maestra local — ${list.length}`; container.appendChild(hdr);
+      const controlsRow = document.createElement('div'); controlsRow.style.display='flex'; controlsRow.style.gap='8px'; controlsRow.style.alignItems='center'; controlsRow.style.marginTop='8px';
+      const lbl = document.createElement('label'); lbl.style.fontSize='0.9rem'; lbl.style.color='#ddd'; lbl.style.marginRight='8px'; lbl.textContent='Mostrar como puntos pequeños';
+      const chk = document.createElement('input'); chk.type='checkbox'; chk.style.marginRight='6px'; chk.onchange = ()=>{ if(chk.checked) setStationRadius(1); else setStationRadius(3); };
+      controlsRow.appendChild(chk); controlsRow.appendChild(lbl);
+      const table = document.createElement('div'); table.style.display = 'grid'; table.style.gridTemplateColumns = '1fr auto auto'; table.style.gap = '6px'; table.style.maxHeight='60vh'; table.style.overflow='auto'; table.style.marginTop='8px';
+      container.appendChild(controlsRow);
+      list.forEach(st => {
+        const name = document.createElement('div'); name.textContent = (st.name||st.NOMBRE_ESTACION||st.estacion||st.nombre||'ND'); name.style.padding='6px 8px';
+        const btnMap = document.createElement('button'); btnMap.className='apply-btn'; btnMap.style.padding='6px 8px'; btnMap.textContent='Ver en mapa';
+        btnMap.onclick = ()=>{
+          const lat = st.lat || st.LATITUD || st.Latitud || st.Y || null; const lon = st.lon || st.LONGITUD || st.Longitud || st.X || null;
+          const s = [{ name: st.name||st.NOMBRE_ESTACION||st.estacion, tipo: st.tipo||st.categoria||'ND', dept: st.dept||st.departamento||'ND', cuenca: st.cuenca||'ND', prec:0, temp:0, act:0, lat: lat, lon: lon, cod: st.cod||st.COD||st.codigo }];
+          CURRENT_VISIBLE_STATIONS = s; if(typeof plotStationsOnMap === 'function'){ plotStationsOnMap(s); } if(typeof renderTable === 'function'){ renderTable(); }
+        };
+        const btnD = document.createElement('button'); btnD.className='apply-btn'; btnD.style.padding='6px 8px'; btnD.textContent='Descargar';
+        btnD.onclick = ()=>{
+          const from = document.getElementById('downloadFrom').value; const to = document.getElementById('downloadTo').value;
+          btnD.disabled = true; btnD.textContent = 'Generando...';
+          fetch('/api/save_by_name', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ station_name: st.name||st.NOMBRE_ESTACION||st.estacion, from_date: from, to_date: to, use_local: true }) })
+            .then(r=>r.json()).then(j=>{ btnD.disabled=false; btnD.textContent='Descargar'; if(j && j.saved && j.download_url){ window.open(j.download_url.startsWith('http')? j.download_url : (window.location.origin + j.download_url), '_blank'); } else { alert('No se generó archivo: ' + (j && j.error? j.error : 'sin datos')); } }).catch(e=>{ btnD.disabled=false; btnD.textContent='Descargar'; alert('Error iniciando descarga'); });
+        };
+        table.appendChild(name); table.appendChild(btnMap); table.appendChild(btnD);
+      });
+      container.appendChild(table);
+      // Añadir botón para iniciar descarga masiva si el usuario lo desea
+      const bulk = document.createElement('div'); bulk.style.marginTop='10px'; const bulkBtn = document.createElement('button'); bulkBtn.className='apply-btn'; bulkBtn.textContent='Iniciar descarga masiva (todas)';
+      bulkBtn.onclick = ()=>{
+        if(!confirm('Iniciar descarga masiva de todas las estaciones de la Maestra? Esto puede tardar mucho.')) return;
+        bulkBtn.disabled = true; bulkBtn.textContent = 'Iniciando...';
+        const from = document.getElementById('downloadFrom').value; const to = document.getElementById('downloadTo').value;
+        fetch('/api/process_all', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ from_date: from, to_date: to, use_local: true }) })
+          .then(r=>r.json()).then(j=>{ bulkBtn.disabled=false; bulkBtn.textContent='Iniciar descarga masiva (todas)'; if(j && Array.isArray(j.saved_files)){ alert('Proceso terminado. Archivos: ' + j.saved_files.length); } else { alert('Proceso finalizado sin resultados.'); } }).catch(e=>{ bulkBtn.disabled=false; bulkBtn.textContent='Iniciar descarga masiva (todas)'; alert('Error iniciando proceso masivo'); });
+      };
+      bulk.appendChild(bulkBtn); container.appendChild(bulk);
+      modal.querySelector('.modal-body').innerHTML = ''; modal.querySelector('.modal-body').appendChild(container);
+    }).catch(err=>{
+      btn.disabled = false; btn.textContent = 'Datos meteorológicos';
+      console.warn('processAllFromMaestra error', err);
+      const msg = typeof err === 'string' ? err : (err && err.message ? err.message : String(err));
+      modal.querySelector('.modal-body').innerHTML = `<div style="padding:12px;color:var(--muted)">Error cargando la Maestra: ${msg}</div>`;
+    });
+}
+
+// Debug controls removed
+
+// ---------- Descarga histórica desde botón ----------
+function _createSpinnerHTML(){
+  return '<span class="spinner" aria-hidden="true"></span>';
+}
+
+function downloadHistoryClickHandler(e){
+  const btn = e.currentTarget;
+  let station = btn.dataset.station || btn.getAttribute('data-station');
+  // attempt to find nearby station name
+  if (!station){
+    const p = btn.closest('.list-item') || btn.closest('.station') || document.querySelector('.list-item.selected');
+    if (p){
+      const nameEl = p.querySelector('.name') || p.querySelector('.station-name');
+      if (nameEl) station = nameEl.textContent.trim();
+    }
+  }
+  if (!station) station = prompt('Ingrese nombre de estación para descargar historial:');
+  if (!station) return;
+
+  const from = btn.dataset.from || '2015-01-01';
+  const to = btn.dataset.to || new Date(Date.now()-86400e3).toISOString().slice(0,10);
+
+  btn.disabled = true;
+  const prev = btn.innerHTML;
+  btn.innerHTML = _createSpinnerHTML() + 'Generando...';
+
+  fetch('/api/save_by_name', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ station_name: station, from_date: from, to_date: to, use_local: false })
+  }).then(r => r.json()).then(j => {
+    btn.disabled = false; btn.innerHTML = prev;
+    if (j && j.saved && j.download_url){
+      // trigger download (build absolute URL to avoid file:// or origin issues)
+      try {
+        const origin = window.location && window.location.origin ? window.location.origin : (window.location.protocol + '//' + window.location.host);
+        const url = (j.download_url.startsWith('http') ? j.download_url : origin + j.download_url);
+        console.log('Download URL:', url, j);
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } catch(err){
+        console.error('Error launching download', err, j);
+        alert('No se pudo iniciar la descarga automáticamente. URL: ' + (j.download_url || JSON.stringify(j)));
+      }
+    } else {
+      const msg = j && j.error ? j.error : JSON.stringify(j);
+      alert('No se pudo generar el archivo: ' + msg);
+    }
+  }).catch(err => {
+    btn.disabled = false; btn.innerHTML = prev;
+    console.error('downloadHistory error', err);
+    alert('Error iniciando descarga: ' + String(err));
+  });
+}
+
+// Attach to any button with class `download-history` on page load
+document.addEventListener('DOMContentLoaded', function(){
+  document.querySelectorAll('.download-history').forEach(b => {
+    b.addEventListener('click', downloadHistoryClickHandler);
+  });
+});
+
+// ratita corriendo - estilo ya definido en dashboard.css
+const style = document.createElement('style');
+style.textContent = `
+.spinner{display:inline-block;vertical-align:middle;font-size:1rem;line-height:1;animation:rat-run 0.45s steps(1) infinite;margin-right:4px;filter:drop-shadow(0 0 4px rgba(26,143,255,0.6))}
+.spinner::before{content:'🐭'}
+@keyframes rat-run{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(4px) scaleX(1)}50%{transform:translateX(0) scaleX(-1)}75%{transform:translateX(-4px) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
+`;
+document.head.appendChild(style);
+</script>
+
+<!-- Modal para listar descargas del sitio antiguo -->
+<div id="siteDownloadsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;z-index:9999">
+  <div style="background:#fff;border-radius:8px;padding:18px;max-width:880px;width:92%;max-height:78vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-weight:700">Descargas — Página antigua (senamhi.gob.pe)</div>
+      <div><button onclick="closeSiteDownloads()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent">Cerrar</button></div>
+    </div>
+    <div id="siteDownloadsList" style="display:block;gap:8px;">
+      <div style="color:#666;font-size:0.9rem;margin-bottom:8px">Cargando enlaces...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function openSiteDownloads(){
+  const modal = document.getElementById('siteDownloadsModal');
+  const list = document.getElementById('siteDownloadsList');
+  list.innerHTML = '<div style="color:#666">Cargando enlaces...</div>';
+  modal.style.display = 'flex';
+  // Cargar enlaces y estaciones remotas en paralelo
+  Promise.all([
+    fetch('/api/site_downloads').then(r=>r.ok? r.json() : [] ).catch(()=>[]),
+    fetch('/api/stations?use_local=false').then(r=>r.ok? r.json() : [] ).catch(()=>[])
+  ]).then(([items, stations])=>{
+    list.innerHTML = '';
+    // Sección: enlaces de descarga
+    const head = document.createElement('div');
+    head.style.marginBottom = '8px';
+    head.innerHTML = `<div style="font-weight:700;margin-bottom:6px">Enlaces de descarga (sitio antiguo)</div>`;
+    list.appendChild(head);
+    if(!Array.isArray(items) || items.length === 0){
+      const no = document.createElement('div'); no.style.color='#666'; no.textContent = 'No se encontraron enlaces de descarga en la página.'; list.appendChild(no);
+    } else {
+      const ul = document.createElement('div'); ul.style.display='flex'; ul.style.flexDirection='column'; ul.style.gap='8px';
+      items.forEach(item => {
+        const btn = document.createElement('button');
+        btn.className = 'dept-btn';
+        // Layout compacto para caber en 3 columnas: mostrar icono de olas y nombre
+        btn.style.fontSize = '0.8rem';
+        btn.style.padding = '7px 8px';
+        btn.style.lineHeight = '1.2';
+        btn.style.textAlign = 'left';
+        btn.title = item.name; // tooltip con nombre completo al hacer hover
+        btn.innerHTML = `<span class="dept-icon">🌊</span><span class="dept-label">${item.name}</span>`;
+        btn.onclick = () => selectItem(btn, item.name, 'cuenca', grid.querySelectorAll('.dept-btn'));
+        grid.appendChild(btn);
+      });
+    list.appendChild(head2);
+    if(!Array.isArray(stations) || stations.length === 0){
+      const no2 = document.createElement('div'); no2.style.color='#666'; no2.textContent = 'No se pudo obtener la lista remota de estaciones.'; list.appendChild(no2);
+    } else {
+      // mostrar tabla mínima con 10 primeras estaciones
+      const table = document.createElement('div'); table.style.display='grid'; table.style.gridTemplateColumns='1fr auto auto'; table.style.gap='6px'; table.style.alignItems='center'; table.style.maxHeight='260px'; table.style.overflow='auto';
+      const sample = stations.slice(0, 50);
+      sample.forEach(st => {
+        const name = document.createElement('div'); name.textContent = st.estacion || st.name || st.nombre || (st.NOMBRE_ESTACION || 'ND'); name.style.padding='6px 8px';
+        const btnMap = document.createElement('button'); btnMap.className='apply-btn'; btnMap.style.padding='6px 8px'; btnMap.textContent='Ver en mapa';
+        btnMap.onclick = ()=>{
+          // set current visible stations to this single station and re-render
+          const lat = st.lat || st.LATITUD || st.Latitud || st.Y || null; const lon = st.lon || st.LONGITUD || st.Longitud || st.X || null;
+          const s = [{ name: st.estacion||st.name||st.NOMBRE_ESTACION, tipo: st.categoria||st.tipo||'ND', dept: st.departamento||st.dept||'ND', cuenca: st.cuenca||'ND', prec:0, temp:0, act:0, lat: lat, lon: lon, cod: st.cod||st.COD||st.codigo }];
+          CURRENT_VISIBLE_STATIONS = s; if(typeof plotStationsOnMap === 'function'){ plotStationsOnMap(s); } if(typeof renderTable === 'function'){ renderTable(); }
+        };
+        const btnD = document.createElement('button'); btnD.className='apply-btn'; btnD.style.padding='6px 8px'; btnD.textContent='Descargar';
+        btnD.onclick = ()=>{
+          const from = document.getElementById('downloadFrom').value; const to = document.getElementById('downloadTo').value;
+          btnD.disabled = true; btnD.textContent = 'Generando...';
+          fetch('/api/save_by_name', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ station_name: st.estacion||st.name||st.NOMBRE_ESTACION, from_date: from, to_date: to, use_local: false }) })
+            .then(r=>r.json()).then(j=>{ btnD.disabled=false; btnD.textContent='Descargar'; if(j && j.saved && j.download_url){ window.open(j.download_url.startsWith('http')? j.download_url : (window.location.origin + j.download_url), '_blank'); } else { alert('No se generó archivo: ' + (j && j.error? j.error : 'sin datos')); } }).catch(e=>{ btnD.disabled=false; btnD.textContent='Descargar'; alert('Error iniciando descarga'); });
+        };
+        table.appendChild(name); table.appendChild(btnMap); table.appendChild(btnD);
+      });
+      list.appendChild(table);
+      if(stations.length > 50){ const more = document.createElement('div'); more.style.marginTop='8px'; more.style.color='#666'; more.textContent = `Mostrando 50 de ${stations.length} estaciones. Usa la API para obtener el listado completo.`; list.appendChild(more); }
+    }
+  }).catch(err=>{
+    list.innerHTML = '<div style="color:#900">Error consultando servidor</div>';
+  });
+}
+function closeSiteDownloads(){ document.getElementById('siteDownloadsModal').style.display = 'none'; }
+</script>
+</body>
+</html>

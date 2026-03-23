@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENAMHI · Datos Históricos</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#060f0a; --bg-2:#0d2a1e;
+  --panel:rgba(10,28,18,0.88); --panel-2:rgba(6,12,8,0.97);
+  --glass:rgba(255,255,255,0.03); --glass-2:rgba(255,255,255,0.06);
+  --accent:#2f6b46; --accent-glow:rgba(47,107,70,0.35);
+  --accent-2:#5fcf8d; --green:#5fcf8d;
+  --text:#e2f0e8; --text-2:#a0bfaa; --muted:#5a8f70;
+  --border:rgba(255,255,255,0.07); --border-2:rgba(47,107,70,0.35);
+  --success:#22c55e; --warn:#f59e0b; --error:#ef4444;
+  --shadow:0 8px 32px rgba(0,0,0,0.55);
+  --shadow-green:0 8px 32px rgba(47,107,70,0.20);
+  --r:12px; --r-lg:16px; --r-xl:20px;
+  --t:all 0.2s cubic-bezier(0.4,0,0.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{min-height:100vh;font-family:'Inter',sans-serif;
+  background:radial-gradient(ellipse at 60% 20%,#0d2a1e 0%,#060f0a 65%);
+  color:var(--text);overflow-x:hidden;}
+
+/* ── HEADER ── */
+.app-header{position:sticky;top:0;z-index:100;
+  background:rgba(6,15,10,0.94);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border-2);
+  padding:0 32px;height:64px;display:flex;align-items:center;gap:16px;}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk',sans-serif;
+  font-weight:700;font-size:1.05rem;color:var(--text);text-decoration:none;}
+.logo .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);
+  box-shadow:0 0 8px var(--accent-2);}
+.hd{width:1px;height:28px;background:var(--border-2);}
+.htitle{font-family:'Space Grotesk',sans-serif;font-size:0.92rem;font-weight:600;
+  color:var(--accent-2);}
+.hspace{flex:1;}
+.btn-back{display:inline-flex;align-items:center;gap:6px;
+  background:var(--glass-2);border:1px solid var(--border-2);
+  color:var(--text-2);font-size:0.81rem;font-weight:500;
+  padding:6px 14px;border-radius:8px;cursor:pointer;text-decoration:none;
+  transition:var(--t);}
+.btn-back:hover{background:rgba(47,107,70,0.2);color:var(--accent-2);border-color:var(--accent-2);}
+
+/* ── MAIN ── */
+.page{max-width:860px;margin:0 auto;padding:44px 24px 80px;}
+
+/* ── HERO ── */
+.hero{text-align:center;margin-bottom:44px;}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(47,107,70,0.15);border:1px solid var(--border-2);
+  border-radius:999px;padding:5px 14px;font-size:0.7rem;font-weight:600;
+  color:var(--accent-2);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:16px;}
+.hero h1{font-family:'Space Grotesk',sans-serif;font-size:2rem;font-weight:700;
+  letter-spacing:-0.03em;line-height:1.2;margin-bottom:10px;}
+.hero h1 span{color:var(--accent-2);}
+.hero p{font-size:0.88rem;color:var(--text-2);max-width:500px;margin:0 auto;line-height:1.6;}
+
+/* ── SOURCE BADGE ── */
+.source-info{display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-top:14px;flex-wrap:wrap;}
+.source-tag{display:inline-flex;align-items:center;gap:5px;
+  background:rgba(6,15,10,0.6);border:1px solid var(--border-2);
+  border-radius:999px;padding:4px 12px;font-size:0.73rem;color:var(--muted);}
+.source-tag strong{color:var(--accent-2);}
+
+/* ── CARD ── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:26px;margin-bottom:18px;}
+.card-title{font-family:'Space Grotesk',sans-serif;font-size:0.82rem;font-weight:700;
+  color:var(--text-2);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;}
+
+/* ── SEARCH ── */
+.search-wrap{position:relative;}
+.s-icon{position:absolute;left:14px;top:50%;transform:translateY(-50%);
+  color:var(--muted);font-size:0.95rem;pointer-events:none;z-index:1;}
+.s-count{position:absolute;right:14px;top:50%;transform:translateY(-50%);
+  font-size:0.72rem;color:var(--muted);pointer-events:none;}
+.search-input{width:100%;background:rgba(6,20,12,0.8);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text);font-size:0.95rem;font-family:'Inter',sans-serif;
+  padding:13px 50px 13px 44px;outline:none;transition:var(--t);}
+.search-input::placeholder{color:var(--muted);}
+.search-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+
+/* ── DROPDOWN ── */
+.dropdown{position:absolute;left:0;right:0;top:calc(100% + 6px);
+  background:var(--panel-2);border:1px solid var(--border-2);border-radius:var(--r);
+  z-index:200;max-height:300px;overflow-y:auto;display:none;
+  box-shadow:0 16px 48px rgba(0,0,0,0.65);}
+.dropdown.open{display:block;}
+.dd-item{padding:10px 14px;cursor:pointer;display:flex;align-items:center;
+  gap:12px;transition:var(--t);border-bottom:1px solid var(--border);}
+.dd-item:last-child{border-bottom:none;}
+.dd-item:hover,.dd-item.focused{background:rgba(47,107,70,0.12);}
+.dd-name{font-size:0.87rem;font-weight:500;color:var(--text);}
+.dd-meta{font-size:0.72rem;color:var(--muted);margin-top:1px;}
+.dd-msg{padding:16px;text-align:center;font-size:0.82rem;color:var(--muted);}
+
+/* ── SELECTED STATION ── */
+.stn-card{display:none;background:rgba(47,107,70,0.08);
+  border:1px solid var(--border-2);border-radius:var(--r);
+  padding:13px 16px;margin-top:12px;align-items:center;gap:14px;}
+.stn-card.show{display:flex;}
+.stn-ico{width:36px;height:36px;background:rgba(47,107,70,0.2);
+  border:1px solid var(--border-2);border-radius:8px;display:flex;
+  align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
+.stn-info{flex:1;min-width:0;}
+.stn-name{font-size:0.9rem;font-weight:600;color:var(--text);}
+.stn-detail{font-size:0.74rem;color:var(--muted);margin-top:2px;}
+.stn-clear{background:none;border:1px solid var(--border);color:var(--muted);
+  border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.76rem;
+  flex-shrink:0;transition:var(--t);}
+.stn-clear:hover{color:var(--error);border-color:var(--error);}
+
+/* ── DATES ── */
+.date-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.field-label{font-size:0.73rem;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;}
+.date-input{width:100%;background:rgba(6,20,12,0.8);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text);font-size:0.9rem;font-family:'Inter',sans-serif;
+  padding:11px 14px;outline:none;transition:var(--t);}
+.date-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+.date-input::-webkit-calendar-picker-indicator{filter:invert(0.7);}
+.presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.preset-btn{background:var(--glass);border:1px solid var(--border);
+  border-radius:999px;color:var(--text-2);font-size:0.73rem;font-weight:500;
+  padding:4px 12px;cursor:pointer;transition:var(--t);}
+.preset-btn:hover{background:rgba(47,107,70,0.15);color:var(--accent-2);border-color:var(--accent-2);}
+
+/* ── DOWNLOAD SECTION ── */
+.dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+/* portal button */
+.btn-portal{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;background:linear-gradient(135deg,#2f6b46,#1a4a2e);
+  border:1px solid rgba(95,207,141,0.3);border-radius:var(--r);
+  color:#e2f0e8;font-family:'Space Grotesk',sans-serif;
+  padding:20px 16px;cursor:pointer;text-decoration:none;transition:var(--t);
+  box-shadow:0 4px 16px rgba(47,107,70,0.25);}
+.btn-portal:hover{background:linear-gradient(135deg,#3a7d52,#254d35);
+  box-shadow:0 8px 28px rgba(47,107,70,0.45);transform:translateY(-1px);}
+.btn-portal .label{font-size:0.95rem;font-weight:700;}
+.btn-portal .sub{font-size:0.72rem;color:rgba(226,240,232,0.65);}
+.btn-portal .icon{font-size:1.6rem;}
+
+/* direct download button */
+.btn-direct{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;background:rgba(47,107,70,0.1);
+  border:1px solid var(--border-2);border-radius:var(--r);
+  color:var(--text-2);font-family:'Space Grotesk',sans-serif;
+  padding:20px 16px;cursor:pointer;text-decoration:none;transition:var(--t);}
+.btn-direct:hover{background:rgba(47,107,70,0.2);color:var(--text);border-color:var(--accent-2);}
+.btn-direct .label{font-size:0.95rem;font-weight:700;color:var(--text);}
+.btn-direct .sub{font-size:0.72rem;}
+.btn-direct .icon{font-size:1.6rem;}
+.btn-direct:disabled,.btn-direct[disabled]{opacity:0.4;cursor:not-allowed;transform:none;}
+
+/* hint */
+.dl-hint{grid-column:1/-1;font-size:0.77rem;color:var(--muted);
+  background:rgba(6,20,12,0.5);border:1px solid var(--border);
+  border-radius:8px;padding:10px 14px;line-height:1.5;}
+.dl-hint strong{color:var(--text-2);}
+.dl-hint a{color:var(--accent-2);text-decoration:none;}
+.dl-hint a:hover{text-decoration:underline;}
+
+/* ── PROGRESS & RESULT ── */
+.progress-area{display:none;margin-top:16px;}
+.progress-area.show{display:block;}
+.progress-box{background:rgba(6,20,12,0.6);border:1px solid var(--border);
+  border-radius:var(--r);padding:18px 20px;}
+.progress-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.spinner{width:16px;height:16px;border:2px solid var(--border-2);
+  border-top-color:var(--accent-2);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.p-label{font-size:0.85rem;color:var(--text-2);}
+.p-stn{font-weight:600;color:var(--accent-2);}
+.p-bar-wrap{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;}
+.p-bar{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  border-radius:2px;transition:width 0.5s ease;width:0%;}
+.p-steps{margin-top:10px;display:flex;flex-direction:column;gap:4px;}
+.p-step{font-size:0.73rem;color:var(--muted);}
+
+.result-box{display:none;margin-top:16px;}
+.result-box.show{display:block;}
+.r-ok{background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);
+  border-radius:var(--r);padding:18px 20px;}
+.r-err{background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);
+  border-radius:var(--r);padding:18px 20px;}
+.r-title{font-family:'Space Grotesk',sans-serif;font-size:0.93rem;font-weight:600;margin-bottom:4px;}
+.r-desc{font-size:0.81rem;color:var(--text-2);margin-bottom:14px;line-height:1.5;}
+.btn-dl-file{display:inline-flex;align-items:center;gap:7px;
+  background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.3);
+  border-radius:8px;color:var(--success);font-size:0.83rem;font-weight:600;
+  padding:9px 16px;text-decoration:none;transition:var(--t);}
+.btn-dl-file:hover{background:rgba(34,197,94,0.25);}
+.btn-retry{display:inline-flex;align-items:center;gap:5px;background:var(--glass);
+  border:1px solid var(--border);border-radius:8px;color:var(--text-2);
+  font-size:0.8rem;padding:8px 13px;cursor:pointer;transition:var(--t);margin-left:8px;}
+.btn-retry:hover{color:var(--text);border-color:var(--border-2);}
+
+/* ── INFO TABLE ── */
+.info-table{width:100%;border-collapse:collapse;font-size:0.82rem;}
+.info-table td{padding:7px 10px;border-bottom:1px solid var(--border);}
+.info-table td:first-child{color:var(--muted);width:36%;font-weight:500;}
+.info-table td:last-child{color:var(--text);}
+.info-table tr:last-child td{border-bottom:none;}
+
+/* ── PORTAL ALERT ── */
+.portal-alert{display:flex;gap:14px;align-items:flex-start;
+  background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.25);
+  border-radius:var(--r);padding:14px 16px;margin-bottom:16px;}
+.pa-icon{font-size:1.4rem;flex-shrink:0;margin-top:1px;}
+.pa-title{font-size:0.86rem;font-weight:600;color:#fbbf24;margin-bottom:4px;}
+.pa-desc{font-size:0.78rem;color:var(--text-2);line-height:1.5;}
+.pa-desc code{background:rgba(255,255,255,0.08);border-radius:3px;
+  padding:1px 5px;font-family:monospace;font-size:0.76rem;color:var(--accent-2);}
+
+/* ── PORTAL MAIN BUTTON ── */
+.btn-portal-main{display:flex;align-items:center;gap:14px;width:100%;
+  background:linear-gradient(135deg,#2f6b46,#1a4a2e);
+  border:1px solid rgba(95,207,141,0.3);border-radius:var(--r);
+  color:#e2f0e8;text-decoration:none;padding:16px 20px;
+  transition:var(--t);box-shadow:0 4px 16px rgba(47,107,70,0.25);
+  margin-bottom:14px;}
+.btn-portal-main:hover{background:linear-gradient(135deg,#3a7d52,#254d35);
+  box-shadow:0 8px 28px rgba(47,107,70,0.45);transform:translateY(-1px);}
+.bpm-icon{font-size:1.6rem;flex-shrink:0;}
+.bpm-text{flex:1;min-width:0;}
+.bpm-label{display:block;font-family:'Space Grotesk',sans-serif;font-size:0.97rem;font-weight:700;}
+.bpm-sub{display:block;font-size:0.72rem;color:rgba(226,240,232,0.6);margin-top:3px;}
+.bpm-arrow{font-size:1.3rem;flex-shrink:0;opacity:0.7;}
+
+/* ── STEPS GUIDE ── */
+.steps-guide{background:rgba(47,107,70,0.07);border:1px solid var(--border-2);
+  border-radius:var(--r);padding:14px 18px;margin-bottom:14px;}
+.sg-title{font-size:0.78rem;font-weight:600;color:var(--text-2);
+  text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;}
+.sg-list{list-style:none;display:flex;flex-direction:column;gap:7px;padding:0;}
+.sg-list li{font-size:0.83rem;color:var(--text-2);display:flex;align-items:baseline;gap:8px;}
+.sg-list li::before{content:counter(item);counter-increment:item;
+  background:var(--accent);color:#fff;border-radius:50%;
+  width:18px;height:18px;font-size:0.68rem;font-weight:700;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sg-list{counter-reset:item;}
+.sg-list li strong{color:var(--accent-2);}
+.sg-list li code{background:rgba(255,255,255,0.08);border-radius:3px;
+  padding:1px 6px;font-family:monospace;font-size:0.76rem;color:#fbbf24;}
+
+/* ── ALT SEPARATOR ── */
+.alt-sep{display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:0.75rem;}
+.alt-sep::before,.alt-sep::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── ALT DIRECT BUTTON ── */
+.btn-direct-alt{width:100%;display:flex;flex-direction:column;align-items:center;
+  gap:4px;background:var(--glass);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text-2);font-family:'Inter',sans-serif;
+  padding:12px 16px;cursor:pointer;transition:var(--t);margin-bottom:0;}
+.btn-direct-alt:hover:not(:disabled){background:rgba(47,107,70,0.1);
+  border-color:var(--border-2);color:var(--text);}
+.btn-direct-alt:disabled{opacity:0.4;cursor:not-allowed;}
+.btn-direct-alt > span:first-child{font-size:0.9rem;font-weight:600;}
+.bda-sub{font-size:0.72rem;color:var(--muted);}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <a href="/" class="logo"><span class="dot"></span>SENAMHI</a>
+  <div class="hd"></div>
+  <span class="htitle">Datos Históricos</span>
+  <div class="hspace"></div>
+  <a href="/" class="btn-back">← Volver al dashboard</a>
+</header>
+
+<main class="page">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge">📡 Descarga directa</div>
+    <h1>Datos <span>históricos</span> por estación</h1>
+    <p>Busca una estación del catálogo oficial, selecciona el período y descarga sus datos históricos desde el portal SENAMHI.</p>
+    <div class="source-info">
+      <span class="source-tag">📂 Fuente estaciones: <strong>Estaciones_Meteorológicas_Peru.xlsx</strong></span>
+      <span class="source-tag">🌐 Descarga: <strong>senamhi.gob.pe/site/descarga-datos</strong></span>
+    </div>
+  </div>
+
+  <!-- 1. BUSCAR -->
+  <div class="card">
+    <div class="card-title">🔍 1. Buscar estación</div>
+    <div class="search-wrap" id="searchWrap">
+      <span class="s-icon">🔍</span>
+      <input class="search-input" id="searchInput" type="text"
+        placeholder="Escribe el nombre de la estación..."
+        autocomplete="off"
+        oninput="onInput()"
+        onkeydown="onKey(event)"
+        onfocus="onFocus()">
+      <span class="s-count" id="sCount"></span>
+      <div class="dropdown" id="dropdown"></div>
+    </div>
+
+    <!-- ESTACIÓN SELECCIONADA -->
+    <div class="stn-card" id="stnCard">
+      <div class="stn-ico">🌦</div>
+      <div class="stn-info">
+        <div class="stn-name" id="stnName">–</div>
+        <div class="stn-detail" id="stnDetail">–</div>
+      </div>
+      <button class="stn-clear" onclick="clearStation()">✕ Cambiar</button>
+    </div>
+  </div>
+
+  <!-- 2. FECHAS -->
+  <div class="card">
+    <div class="card-title">📅 2. Período de descarga</div>
+    <div class="date-row">
+      <div>
+        <div class="field-label">Desde</div>
+        <input class="date-input" id="fromDate" type="date" value="2020-01-01">
+      </div>
+      <div>
+        <div class="field-label">Hasta</div>
+        <input class="date-input" id="toDate" type="date">
+      </div>
+    </div>
+    <div class="presets">
+      <span style="font-size:0.72rem;color:var(--muted);align-self:center">Rápido:</span>
+      <button class="preset-btn" onclick="setYears(1)">1 año</button>
+      <button class="preset-btn" onclick="setYears(3)">3 años</button>
+      <button class="preset-btn" onclick="setYears(5)">5 años</button>
+      <button class="preset-btn" onclick="setYears(10)">10 años</button>
+      <button class="preset-btn" onclick="setYears(20)">20 años</button>
+    </div>
+  </div>
+
+  <!-- 3. DESCARGAR -->
+  <div class="card">
+    <div class="card-title">⬇ 3. Descargar datos</div>
+
+    <!-- LOGIN SENAMHI HISTÓRICO -->
+    <div id="loginCard" style="margin-bottom:14px;background:rgba(47,107,70,0.07);
+      border:1px solid var(--border-2);border-radius:var(--r);padding:16px 18px;">
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid var(--border);">
+        <button onclick="switchTab('tab-session')" id="tab-session-btn"
+          style="background:none;border:none;border-bottom:2px solid var(--accent-2);
+          color:var(--accent-2);font-size:0.8rem;font-weight:600;padding:6px 14px;cursor:pointer;">
+          📋 Pegar sesión
+        </button>
+        <button onclick="switchTab('tab-login')" id="tab-login-btn"
+          style="background:none;border:none;border-bottom:2px solid transparent;
+          color:var(--muted);font-size:0.8rem;font-weight:600;padding:6px 14px;cursor:pointer;">
+          🔐 Login manual
+        </button>
+      </div>
+
+      <!-- TAB: PEGAR PHPSESSID (recomendado) -->
+      <div id="tab-session">
+        <div style="font-size:0.8rem;color:var(--text-2);margin-bottom:10px;line-height:1.6;">
+          <strong>1.</strong> Abre
+          <a href="https://www.senamhi.gob.pe/site/descarga-datos/" target="_blank"
+            style="color:var(--accent-2)">el portal SENAMHI →</a>
+          e inicia sesión con tu cuenta.<br>
+          <strong>2.</strong> Presiona <kbd style="background:rgba(255,255,255,0.1);border:1px solid var(--border);
+            border-radius:3px;padding:1px 5px;font-size:0.75rem;">F12</kbd> →
+          pestaña <strong>Aplicación</strong> → <strong>Cookies</strong> →
+          copia el valor de <code style="color:#fbbf24;background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;">PHPSESSID</code><br>
+          <strong>3.</strong> Pégalo aquí:
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input id="sessInput" type="text" class="date-input" placeholder="Pega aquí el PHPSESSID..."
+            style="flex:1;font-size:0.83rem;font-family:monospace;padding:9px 12px;">
+          <button onclick="doSessionLogin()"
+            style="background:linear-gradient(135deg,#2f6b46,#1a4a2e);border:1px solid rgba(95,207,141,0.3);
+            border-radius:8px;color:#e2f0e8;font-size:0.87rem;font-weight:700;
+            padding:9px 18px;cursor:pointer;white-space:nowrap;">
+            Conectar →
+          </button>
+        </div>
+        <div id="sessMsg" style="font-size:0.82rem;color:#ff6b6b;margin-top:8px;display:none;
+          padding:8px 12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;"></div>
+      </div>
+
+      <!-- TAB: LOGIN CON CAPTCHA -->
+      <div id="tab-login" style="display:none">
+
+      <!-- Estado: no logueado -->
+      <div id="loginForm">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:0.82rem;font-weight:700;
+          color:var(--text-2);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">
+          🔐 Acceso al portal histórico SENAMHI
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div>
+            <div class="field-label">Correo</div>
+            <input id="loginEmail" type="email" class="date-input" placeholder="usuario@email.com"
+              style="font-size:0.84rem;padding:9px 12px;">
+          </div>
+          <div>
+            <div class="field-label">Contraseña</div>
+            <input id="loginPass" type="password" class="date-input" placeholder="••••••••"
+              style="font-size:0.84rem;padding:9px 12px;">
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div class="field-label">Código de seguridad — escribe las letras que ves en la imagen</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+            <img id="captchaImg" src="" alt="captcha"
+              style="height:40px;border-radius:6px;border:2px solid var(--border-2);cursor:pointer;background:#fff;"
+              title="Clic para recargar captcha" onclick="loadCaptcha()">
+            <input id="captchaInput" type="text" maxlength="5"
+              placeholder="Escribe aquí"
+              onkeydown="if(event.key==='Enter') doLogin()"
+              style="width:130px;background:rgba(6,20,12,0.8);border:2px solid var(--accent);
+              border-radius:var(--r);color:var(--text);font-size:1rem;font-family:monospace;
+              padding:9px 12px;outline:none;letter-spacing:0.15em;">
+            <button onclick="loadCaptcha()" title="Nuevo código"
+              style="background:rgba(47,107,70,0.15);border:1px solid var(--border-2);
+              border-radius:6px;color:var(--accent-2);padding:8px 12px;cursor:pointer;font-size:0.85rem;">
+              ↺ Nuevo
+            </button>
+          </div>
+        </div>
+        <div id="loginMsg" style="font-size:0.82rem;font-weight:600;color:#ff6b6b;
+          margin-bottom:10px;padding:8px 12px;background:rgba(239,68,68,0.1);
+          border:1px solid rgba(239,68,68,0.3);border-radius:6px;display:none;"></div>
+        <button onclick="doLogin()" id="btnLogin"
+          style="background:linear-gradient(135deg,#2f6b46,#1a4a2e);border:1px solid rgba(95,207,141,0.3);
+          border-radius:8px;color:#e2f0e8;font-size:0.9rem;font-weight:700;
+          padding:10px 24px;cursor:pointer;transition:var(--t);">
+          Iniciar sesión →
+        </button>
+      </div>
+
+      <!-- Estado: logueado -->
+      <div id="loginStatus" style="display:none;align-items:center;gap:12px;">
+        <span style="font-size:1.2rem;">✅</span>
+        <div style="flex:1;">
+          <div style="font-size:0.88rem;font-weight:600;color:var(--success);">Sesión activa</div>
+          <div id="loginUser" style="font-size:0.75rem;color:var(--muted);"></div>
+        </div>
+        <button onclick="doLogout()" style="background:none;border:1px solid var(--border);
+          border-radius:6px;color:var(--muted);padding:5px 10px;cursor:pointer;font-size:0.75rem;">
+          Desconectar
+        </button>
+      </div>
+
+      </div> <!-- cierre tab-login -->
+    </div>
+
+    <!-- BOTÓN DESCARGA PORTAL HISTÓRICO (requiere sesión) -->
+    <button id="btnHistDl" onclick="startHistDownload()" disabled
+      style="width:100%;display:flex;align-items:center;gap:14px;
+      background:linear-gradient(135deg,#2f6b46,#1a4a2e);
+      border:1px solid rgba(95,207,141,0.3);border-radius:var(--r);
+      color:#e2f0e8;padding:16px 20px;cursor:not-allowed;
+      transition:var(--t);box-shadow:0 4px 16px rgba(47,107,70,0.25);
+      margin-bottom:14px;opacity:0.45;">
+      <span style="font-size:1.5rem;flex-shrink:0;">📥</span>
+      <div style="flex:1;min-width:0;text-align:left;">
+        <span style="display:block;font-family:'Space Grotesk',sans-serif;font-size:0.95rem;font-weight:700;">
+          Descargar datos históricos
+        </span>
+        <span id="btnHistSub" style="display:block;font-size:0.72rem;color:rgba(226,240,232,0.6);margin-top:3px;">
+          Inicia sesión arriba para activar esta opción
+        </span>
+      </div>
+      <span style="font-size:1.2rem;opacity:0.6;">→</span>
+    </button>
+
+    <!-- CAPTCHA DE DESCARGA HISTÓRICA -->
+    <div id="histCaptchaBox" style="display:none;margin-bottom:12px;
+      background:rgba(10,28,18,0.7);border:1px solid rgba(95,207,141,0.25);
+      border-radius:var(--r);padding:16px 18px;">
+      <div style="font-size:0.8rem;color:var(--text-2);margin-bottom:10px;font-weight:600;">
+        🔐 El portal requiere verificación — ingresa el código de la imagen:
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <img id="histCaptchaImg" src="" alt="captcha"
+          style="border-radius:6px;border:1px solid rgba(255,255,255,0.1);
+          height:44px;cursor:pointer;" title="Clic para refrescar"
+          onclick="refreshHistCaptcha()">
+        <span style="font-size:0.72rem;color:var(--muted);">↺ clic para refrescar</span>
+        <input id="histCaptchaInput" type="text" maxlength="6" placeholder="Código"
+          style="background:rgba(6,20,12,0.9);border:1px solid var(--border-2);
+          border-radius:8px;color:var(--text);font-size:1rem;font-family:monospace;
+          letter-spacing:0.15em;padding:8px 14px;width:120px;outline:none;"
+          onkeydown="if(event.key==='Enter')submitHistCaptcha()">
+        <button onclick="submitHistCaptcha()"
+          style="background:var(--accent);border:none;border-radius:8px;
+          color:#fff;font-size:0.85rem;font-weight:600;padding:8px 18px;cursor:pointer;">
+          Descargar
+        </button>
+        <button onclick="cancelHistCaptcha()"
+          style="background:transparent;border:1px solid var(--border);border-radius:8px;
+          color:var(--muted);font-size:0.82rem;padding:8px 14px;cursor:pointer;">
+          Cancelar
+        </button>
+      </div>
+      <div id="histCaptchaErr" style="display:none;margin-top:8px;font-size:0.78rem;color:var(--error);"></div>
+    </div>
+
+    <!-- SEPARADOR -->
+    <div class="alt-sep"><span>o descarga automática (datos recientes ~2015+)</span></div>
+
+    <!-- ADVERTENCIA DATOS ANTIGUOS -->
+    <div id="oldDataWarn" style="display:none;margin-bottom:10px;padding:10px 14px;
+      background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);
+      border-radius:8px;font-size:0.79rem;color:#fbbf24;line-height:1.5;">
+      ⚠ <strong>Período antes de 2015:</strong>
+      el sistema automático puede no tener esos datos.
+      Si iniciaste sesión, usa el botón <strong>Descargar datos históricos</strong>.
+    </div>
+
+    <!-- BOTÓN SECUNDARIO: DESCARGA AUTOMÁTICA -->
+    <button class="btn-direct-alt" id="btnDirect" onclick="startDirect()">
+      <span>⬇ Descarga automática</span>
+      <span class="bda-sub">Datos recientes vía mapa-estaciones-2 (aprox. desde 2015)</span>
+    </button>
+
+    <!-- PROGRESO (descarga directa) -->
+    <div class="progress-area" id="progressArea">
+      <div class="progress-box">
+        <div class="progress-head">
+          <div class="spinner"></div>
+          <span class="p-label">Descargando datos de <span class="p-stn" id="pStn">–</span>…</span>
+        </div>
+        <div class="p-bar-wrap"><div class="p-bar" id="pBar"></div></div>
+        <div class="p-steps">
+          <div class="p-step" id="ps1">⏳ Verificando disponibilidad en portal SENAMHI…</div>
+          <div class="p-step" id="ps2" style="opacity:.3">⏳ Descargando mes a mes…</div>
+          <div class="p-step" id="ps3" style="opacity:.3">⏳ Generando archivo Excel…</div>
+        </div>
+        <!-- LOG EN VIVO -->
+        <div id="liveLog" style="margin-top:12px;max-height:160px;overflow-y:auto;
+          background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.06);
+          border-radius:8px;padding:8px 10px;font-family:monospace;font-size:0.72rem;
+          color:var(--muted);display:none;"></div>
+      </div>
+    </div>
+
+    <!-- RESULTADO -->
+    <div class="result-box" id="resultBox"></div>
+  </div>
+
+  <!-- IMPORTAR TXT DEL PORTAL HISTÓRICO -->
+  <div class="card">
+    <div class="card-title">📂 Importar archivo .txt del portal histórico</div>
+    <p style="font-size:0.82rem;color:var(--text-2);margin-bottom:14px;line-height:1.6;">
+      Si ya descargaste el archivo <code style="background:rgba(255,255,255,0.08);padding:1px 6px;border-radius:3px;color:#fbbf24">qcNNNNNNNN.txt</code>
+      del portal SENAMHI manualmente, arrástralo aquí para convertirlo a Excel.
+    </p>
+    <div id="dropZone"
+      ondragover="event.preventDefault();this.style.borderColor='var(--accent-2)'"
+      ondragleave="this.style.borderColor='var(--border-2)'"
+      ondrop="onDropTxt(event)"
+      style="border:2px dashed var(--border-2);border-radius:var(--r);
+      padding:28px;text-align:center;cursor:pointer;transition:var(--t);"
+      onclick="document.getElementById('fileTxt').click()">
+      <div style="font-size:2rem;margin-bottom:8px;">📄</div>
+      <div style="font-size:0.88rem;font-weight:600;color:var(--text);">Arrastra el archivo .txt aquí</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">o haz clic para seleccionar</div>
+      <input id="fileTxt" type="file" accept=".txt" style="display:none" onchange="onFileTxt(this.files)">
+    </div>
+    <div id="importResult" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- INFO DE ESTACIÓN SELECCIONADA -->
+  <div class="card" id="stnInfoCard" style="display:none">
+    <div class="card-title">📌 Información de la estación</div>
+    <table class="info-table" id="stnInfoTable"></table>
+  </div>
+
+</main>
+
+<script>
+// ── STATE ──
+let allStations = [];
+let filtered = [];
+let selected = null;
+let focusIdx = -1;
+let pollTimer = null;
+let pPct = 0;
+let pInterval = null;
+
+// ── INIT ──
+const now = new Date();
+document.getElementById('toDate').value = now.toISOString().slice(0,10);
+loadStations();
+checkOldDate();
+
+async function loadStations() {
+  document.getElementById('sCount').textContent = '…';
+  try {
+    const res = await fetch('/api/stations_historico');
+    const data = res.ok ? await res.json() : {};
+    allStations = (data.ok && Array.isArray(data.stations)) ? data.stations : [];
+    document.getElementById('sCount').textContent = allStations.length ? allStations.length + ' estaciones' : '';
+  } catch(e) {
+    document.getElementById('sCount').textContent = 'error';
+    allStations = [];
+  }
+}
+
+// ── SEARCH ──
+let _st = null;
+function onInput() {
+  clearTimeout(_st);
+  _st = setTimeout(doSearch, 120);
+}
+function onFocus() {
+  if (document.getElementById('searchInput').value.trim()) doSearch();
+}
+
+function doSearch() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  if (!q) { closeDD(); return; }
+  if (!allStations.length) {
+    showDD('<div class="dd-msg">⏳ Cargando catálogo…</div>');
+    return;
+  }
+  filtered = allStations.filter(s =>
+    (s.estacion||'').toLowerCase().includes(q) ||
+    (s.cod||'').toLowerCase().includes(q)
+  ).slice(0, 40);
+  focusIdx = -1;
+  if (!filtered.length) { showDD('<div class="dd-msg">Sin resultados</div>'); return; }
+
+  showDD(filtered.map((s,i) => `
+    <div class="dd-item" data-i="${i}" onmousedown="pickStation(${i})" onmouseenter="setFocus(${i})">
+      <span style="font-size:1rem">🌦</span>
+      <div>
+        <div class="dd-name">${esc(s.estacion)}</div>
+        <div class="dd-meta">${esc(s.cod)} · ${s.lat?.toFixed(3)}, ${s.lon?.toFixed(3)}${s.altitud!=null?' · '+s.altitud+' m':''}</div>
+      </div>
+    </div>`).join(''));
+}
+
+function showDD(html) {
+  const dd = document.getElementById('dropdown');
+  dd.innerHTML = html; dd.classList.add('open');
+}
+function closeDD() {
+  document.getElementById('dropdown').classList.remove('open'); focusIdx = -1;
+}
+function setFocus(i) {
+  focusIdx = i;
+  document.querySelectorAll('.dd-item').forEach((el,j) => el.classList.toggle('focused', j===i));
+}
+function onKey(e) {
+  const items = document.querySelectorAll('.dd-item');
+  if (e.key==='ArrowDown') { e.preventDefault(); focusIdx=Math.min(focusIdx+1,items.length-1); setFocus(focusIdx); }
+  else if (e.key==='ArrowUp') { e.preventDefault(); focusIdx=Math.max(focusIdx-1,0); setFocus(focusIdx); }
+  else if (e.key==='Enter' && focusIdx>=0) pickStation(focusIdx);
+  else if (e.key==='Escape') closeDD();
+}
+document.addEventListener('click', e => {
+  if (!document.getElementById('searchWrap').contains(e.target)) closeDD();
+});
+
+function pickStation(i) {
+  const s = filtered[i];
+  if (!s) return;
+  selected = s;
+  document.getElementById('searchInput').value = s.estacion;
+  closeDD();
+
+  document.getElementById('stnName').textContent = s.estacion;
+  document.getElementById('stnDetail').textContent =
+    `Código: ${s.cod||'–'} · Lat: ${s.lat?.toFixed(4)} · Lon: ${s.lon?.toFixed(4)}${s.altitud!=null?' · Altitud: '+s.altitud+' m':''}`;
+  document.getElementById('stnCard').classList.add('show');
+
+  // Info table
+  const codAlt = s.cod_alt || swapPrefix(s.cod);
+  const rows = [
+    ['Nombre', s.estacion],
+    ['Código (Excel / ho)', s.cod||'–'],
+    ['Código (Portal / qc)', codAlt||'–'],
+    ['Latitud', s.lat?.toFixed(5)+'°'],
+    ['Longitud', s.lon?.toFixed(5)+'°'],
+    ['Altitud', s.altitud!=null ? s.altitud+' m.s.n.m.' : '–'],
+    ['Tipo', s.categoria||'Meteorológica'],
+  ];
+  document.getElementById('stnInfoTable').innerHTML = rows.map(([l,v])=>
+    `<tr><td>${l}</td><td>${esc(String(v))}</td></tr>`).join('');
+  document.getElementById('stnInfoCard').style.display = 'block';
+
+  // Mostrar instrucciones con nombre y código del portal
+  document.getElementById('sgName').textContent = s.estacion;
+  document.getElementById('sgCod').textContent = (s.cod_alt || swapPrefix(s.cod) || s.cod || 'qc00000000') + '.txt';
+  document.getElementById('stepsGuide').style.display = 'block';
+
+  // Reset results
+  resetResults();
+}
+
+function clearStation() {
+  selected = null;
+  document.getElementById('searchInput').value = '';
+  document.getElementById('stnCard').classList.remove('show');
+  document.getElementById('stnInfoCard').style.display = 'none';
+  document.getElementById('stepsGuide').style.display = 'none';
+  document.getElementById('searchInput').focus();
+  resetResults();
+}
+
+// ── DATES ──
+function setYears(n) {
+  const to = new Date();
+  const from = new Date();
+  from.setFullYear(from.getFullYear() - n);
+  document.getElementById('fromDate').value = from.toISOString().slice(0,10);
+  document.getElementById('toDate').value = to.toISOString().slice(0,10);
+  checkOldDate();
+}
+
+function checkOldDate() {
+  const from = document.getElementById('fromDate').value;
+  const warn = document.getElementById('oldDataWarn');
+  if (!warn) return;
+  // Mostrar advertencia si el año inicio es antes de 2015
+  warn.style.display = (from && from < '2015-01-01') ? 'block' : 'none';
+}
+
+document.getElementById('fromDate').addEventListener('change', checkOldDate);
+document.getElementById('toDate').addEventListener('change', checkOldDate);
+
+// ── PORTAL BUTTON ──
+function onPortalClick(e) {
+  // Always open the portal; no need to check station
+  // (it's a public page, user navigates manually)
+}
+
+// ── DIRECT DOWNLOAD ──
+// Los códigos del Excel usan prefijo 'ho' (ej: ho00000708).
+// El portal SENAMHI usa 'qc' para el mismo número (ej: qc00000708).
+// Enviamos ambos al backend: station_code = cod principal,
+// station_code_alt = variante qc, para que el sistema pruebe los dos.
+async function startDirect() {
+  if (!selected) { warn('Primero selecciona una estación'); return; }
+  const from = document.getElementById('fromDate').value;
+  const to = document.getElementById('toDate').value;
+  if (!from || !to || from > to) { warn('Selecciona un período válido'); return; }
+
+  const stn = selected;
+  setDownloading(true, stn.estacion);
+
+  // Construir ambas variantes de código (ho <-> qc)
+  const codMain = stn.cod || '';
+  const codAlt  = stn.cod_alt || swapPrefix(stn.cod);
+
+  try {
+    const res = await fetch('/api/save_by_name', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        station_name: stn.estacion,
+        station_code: codAlt || codMain,   // preferir qc (variante portal)
+        station_code_ho: codMain,           // código ho (Excel)
+        from_date: from,
+        to_date: to,
+        use_local: true
+      })
+    });
+    const data = await res.json();
+    if (data.job_id) {
+      animProg(1);
+      pollJob(data.job_id, stn.estacion, from, to);
+    } else {
+      setDownloading(false);
+      if (data.saved && data.download_url) showOk(stn.estacion, from, to, data.download_url, data.file);
+      else showErr(data.error || 'Error desconocido');
+    }
+  } catch(e) {
+    setDownloading(false);
+    showErr('Error de conexión: ' + e.message);
+  }
+}
+
+function pollJob(jobId, name, from, to) {
+  clearTimeout(pollTimer);
+  let elapsed = 0;
+  let lastLogCount = 0;
+
+  function appendLogs(logs) {
+    if (!logs || !logs.length) return;
+    const box = document.getElementById('liveLog');
+    if (!box) return;
+    const newLines = logs.slice(lastLogCount);
+    if (!newLines.length) return;
+    lastLogCount = logs.length;
+    box.style.display = 'block';
+    newLines.forEach(line => {
+      const d = document.createElement('div');
+      // Colorear según tipo
+      if (line.startsWith('+')) d.style.color = 'var(--success)';
+      else if (line.startsWith('-')) d.style.color = 'var(--warn)';
+      else if (line.startsWith('!') || line.startsWith('Error')) d.style.color = 'var(--error)';
+      else if (line.startsWith('>') || line.startsWith('?')) d.style.color = 'var(--accent-2)';
+      d.textContent = line;
+      box.appendChild(d);
+    });
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function poll() {
+    fetch('/api/job_status/' + jobId)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) { pollTimer = setTimeout(poll, 2000); return; }
+        elapsed += 2;
+        if (elapsed < 8) animProg(1);
+        else if (elapsed < 30) animProg(2);
+        else animProg(3);
+
+        // Mostrar logs del servidor
+        appendLogs(data.logs);
+
+        if (data.status === 'done') {
+          clearInterval(pInterval);
+          document.getElementById('pBar').style.width = '100%';
+          setDownloading(false);
+          if (data.result?.saved && data.result?.download_url)
+            showOk(name, from, to, data.result.download_url, data.result.file);
+          else showErr((data.result?.error) || 'Sin datos disponibles');
+        } else if (data.status === 'failed') {
+          clearInterval(pInterval);
+          setDownloading(false);
+          showErr(data.error || 'Error en la descarga');
+        } else {
+          pollTimer = setTimeout(poll, 2000);
+        }
+      })
+      .catch(() => { pollTimer = setTimeout(poll, 3000); });
+  }
+  pollTimer = setTimeout(poll, 2000);
+}
+
+function animProg(stage) {
+  clearInterval(pInterval);
+  const targets = [0, 25, 60, 88];
+  pPct = targets[stage];
+  document.getElementById('pBar').style.width = pPct + '%';
+  const labels = [
+    '⏳ Verificando disponibilidad en portal SENAMHI…',
+    '⬇ Descargando mes a mes…',
+    '📊 Generando archivo Excel…'
+  ];
+  ['ps1','ps2','ps3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    el.style.opacity = i <= stage-1 ? '1' : '0.3';
+    el.textContent = i < stage-1 ? '✅ ' + labels[i].replace(/^[⏳⬇📊✅]\s*/,'') :
+                     i === stage-1 ? labels[i] : labels[i];
+  });
+  pInterval = setInterval(() => {
+    const max = [0,40,80,96][stage];
+    if (pPct < max) { pPct += 0.4; document.getElementById('pBar').style.width = pPct+'%'; }
+  }, 400);
+}
+
+function setDownloading(active, name) {
+  const btn = document.getElementById('btnDirect');
+  const prog = document.getElementById('progressArea');
+  if (active) {
+    btn.disabled = true;
+    btn.querySelector('span:first-child').textContent = '⏳ Descargando…';
+    prog.classList.add('show');
+    document.getElementById('pStn').textContent = name||'–';
+    pPct = 0;
+    document.getElementById('pBar').style.width = '0%';
+    // Limpiar log anterior
+    const log = document.getElementById('liveLog');
+    if (log) { log.innerHTML = ''; log.style.display = 'none'; }
+  } else {
+    btn.disabled = false;
+    btn.querySelector('span:first-child').textContent = '⬇ Descarga automática';
+    prog.classList.remove('show');
+  }
+}
+
+function showOk(name, from, to, url, file) {
+  const box = document.getElementById('resultBox');
+  box.innerHTML = `<div class="r-ok">
+    <div class="r-title">✅ Descarga completada</div>
+    <div class="r-desc">Datos de <strong>${esc(name)}</strong> — del ${from} al ${to}.</div>
+    <a class="btn-dl-file" href="${esc(url)}" download="${esc(file||'datos.xlsx')}">⬇ Guardar Excel</a>
+    <button class="btn-retry" onclick="resetResults()">↺ Nueva descarga</button>
+  </div>`;
+  box.classList.add('show');
+}
+
+function showErr(msg) {
+  const box = document.getElementById('resultBox');
+  const from = document.getElementById('fromDate').value || '';
+  const isOld = from && from < '2015-01-01';
+  const extra = isOld
+    ? `<div style="margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.1);
+        border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:0.78rem;color:#fbbf24;">
+        ⚠ Estás pidiendo datos del año <strong>${from.slice(0,4)}</strong>.
+        El sistema automático solo tiene datos desde ~2015.<br>
+        Para datos históricos anteriores usa el
+        <a href="https://www.senamhi.gob.pe/site/descarga-datos/" target="_blank"
+          style="color:var(--accent-2);text-decoration:underline">Portal SENAMHI con tu cuenta →</a>
+      </div>`
+    : '';
+  box.innerHTML = `<div class="r-err">
+    <div class="r-title">❌ No se pudo descargar</div>
+    <div class="r-desc">${esc(msg)}</div>
+    ${extra}
+    <div style="margin-top:12px">
+      <button class="btn-retry" onclick="resetResults()">↺ Intentar de nuevo</button>
+      <a class="btn-retry" href="https://www.senamhi.gob.pe/site/descarga-datos/"
+        target="_blank" rel="noopener" style="text-decoration:none;margin-left:6px">
+        🌐 Ir al portal manual →
+      </a>
+    </div>
+  </div>`;
+  box.classList.add('show');
+}
+
+function resetResults() {
+  clearTimeout(pollTimer);
+  clearInterval(pInterval);
+  setDownloading(false);
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('resultBox').innerHTML = '';
+}
+
+function warn(msg) {
+  const inp = document.getElementById('searchInput');
+  inp.style.borderColor = 'var(--warn)';
+  inp.placeholder = '⚠ ' + msg;
+  setTimeout(() => { inp.style.borderColor=''; inp.placeholder='Escribe el nombre de la estación...'; }, 2500);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── IMPORTAR TXT ──
+function onDropTxt(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').style.borderColor = 'var(--border-2)';
+  const files = e.dataTransfer.files;
+  if (files.length) onFileTxt(files);
+}
+
+async function onFileTxt(files) {
+  const file = files[0];
+  if (!file) return;
+  const box = document.getElementById('importResult');
+  box.innerHTML = `<div style="color:var(--muted);font-size:0.82rem;">⏳ Procesando <strong>${esc(file.name)}</strong>…</div>`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  if (selected) formData.append('station_name', selected.estacion);
+
+  try {
+    const r = await fetch('/api/import_hist_txt', {method:'POST', body: formData});
+    const d = await r.json();
+    if (d.ok) {
+      box.innerHTML = `<div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);
+        border-radius:var(--r);padding:14px 16px;">
+        <div style="font-weight:600;color:var(--success);margin-bottom:4px;">✅ Archivo convertido</div>
+        <div style="font-size:0.8rem;color:var(--text-2);margin-bottom:10px;">
+          ${d.rows} registros · ${esc(d.file)}
+        </div>
+        <a class="btn-dl-file" href="${esc(d.download_url)}" download="${esc(d.file)}">⬇ Guardar Excel</a>
+      </div>`;
+    } else {
+      box.innerHTML = `<div style="color:var(--error);font-size:0.82rem;">❌ ${esc(d.error)}</div>`;
+    }
+  } catch(e) {
+    box.innerHTML = `<div style="color:var(--error);font-size:0.82rem;">❌ Error: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── LOGIN SENAMHI HISTÓRICO ──
+let _sessionId = null;
+let _loggedIn  = false;
+
+function switchTab(tab) {
+  document.getElementById('tab-session').style.display = tab === 'tab-session' ? 'block' : 'none';
+  document.getElementById('tab-login').style.display   = tab === 'tab-login'   ? 'block' : 'none';
+  document.getElementById('tab-session-btn').style.borderBottomColor = tab === 'tab-session' ? 'var(--accent-2)' : 'transparent';
+  document.getElementById('tab-session-btn').style.color = tab === 'tab-session' ? 'var(--accent-2)' : 'var(--muted)';
+  document.getElementById('tab-login-btn').style.borderBottomColor = tab === 'tab-login' ? 'var(--accent-2)' : 'transparent';
+  document.getElementById('tab-login-btn').style.color = tab === 'tab-login' ? 'var(--accent-2)' : 'var(--muted)';
+}
+
+async function doSessionLogin() {
+  const phpsessid = document.getElementById('sessInput').value.trim();
+  if (!phpsessid) { showSessMsg('⚠ Pega el valor de PHPSESSID'); return; }
+
+  const btn = event.target;
+  btn.textContent = '⏳ Verificando…'; btn.disabled = true;
+
+  try {
+    const r = await fetch('/api/hist_session', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({phpsessid})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      _loggedIn = true;
+      _sessionId = d.session_id;
+      document.getElementById('tab-session').style.display = 'none';
+      document.getElementById('tab-login').style.display = 'none';
+      document.getElementById('loginStatus').style.display = 'flex';
+      document.getElementById('loginUser').textContent = 'Sesión SENAMHI activa · ' + phpsessid.slice(0,8) + '…';
+      setHistBtn(true);
+    } else {
+      showSessMsg('❌ ' + (d.error || 'Sesión inválida o expirada'));
+    }
+  } catch(e) {
+    showSessMsg('❌ Error: ' + e.message);
+  }
+  btn.textContent = 'Conectar →'; btn.disabled = false;
+}
+
+function showSessMsg(msg) {
+  const el = document.getElementById('sessMsg');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+async function loadCaptcha() {
+  document.getElementById('captchaImg').src = '';
+  document.getElementById('captchaInput').value = '';
+  document.getElementById('loginMsg').style.display = 'none';
+  try {
+    const r = await fetch('/api/hist_captcha');
+    const d = await r.json();
+    if (!d.ok) { showLoginMsg('Error obteniendo captcha: ' + d.error); return; }
+    _sessionId = d.session_id;
+    document.getElementById('captchaImg').src = 'data:image/png;base64,' + d.captcha_b64;
+  } catch(e) {
+    showLoginMsg('Error de red: ' + e.message);
+  }
+}
+
+async function doLogin() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const captcha  = document.getElementById('captchaInput').value.trim();  // NO convertir a mayúsculas — SENAMHI es case-sensitive
+
+  if (!email)    { showLoginMsg('⚠ Ingresa tu correo'); return; }
+  if (!password) { showLoginMsg('⚠ Ingresa tu contraseña'); return; }
+  if (!captcha)  { showLoginMsg('⚠ Escribe el código de seguridad de la imagen'); return; }
+  if (!_sessionId) { showLoginMsg('⚠ Recarga el captcha primero'); loadCaptcha(); return; }
+
+  const btn = document.getElementById('btnLogin');
+  btn.textContent = '⏳ Verificando…';  btn.disabled = true;
+
+  try {
+    const r = await fetch('/api/hist_login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({session_id: _sessionId, email, password, captcha})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      _loggedIn = true;
+      document.getElementById('loginMsg').style.display = 'none';
+      document.getElementById('loginForm').style.display = 'none';
+      document.getElementById('loginStatus').style.display = 'flex';
+      document.getElementById('loginUser').textContent = email;
+      setHistBtn(true);
+    } else {
+      const errMsg = d.error || 'Error desconocido';
+      if (errMsg.toLowerCase().includes('incorrectos') || errMsg.toLowerCase().includes('captcha')) {
+        showLoginMsg('❌ ' + errMsg + ' — Se generó un nuevo código de seguridad');
+      } else {
+        showLoginMsg('❌ ' + errMsg);
+      }
+      loadCaptcha();  // nuevo captcha al fallar
+    }
+  } catch(e) {
+    showLoginMsg('❌ Error de conexión: ' + e.message);
+  }
+  btn.textContent = 'Iniciar sesión →';  btn.disabled = false;
+}
+
+function doLogout() {
+  _loggedIn = false;
+  _sessionId = null;
+  document.getElementById('loginForm').style.display = 'block';
+  document.getElementById('loginStatus').style.display = 'none';
+  setHistBtn(false);
+  loadCaptcha();
+}
+
+function showLoginMsg(msg) {
+  const el = document.getElementById('loginMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function setHistBtn(enabled) {
+  const btn = document.getElementById('btnHistDl');
+  const sub = document.getElementById('btnHistSub');
+  btn.disabled = !enabled;
+  btn.style.opacity = enabled ? '1' : '0.45';
+  btn.style.cursor  = enabled ? 'pointer' : 'not-allowed';
+  sub.textContent   = enabled
+    ? 'Descarga directa desde el portal histórico SENAMHI'
+    : 'Inicia sesión arriba para activar esta opción';
+}
+
+let _histDlPayload = null; // guardamos el payload para el step 2
+
+async function startHistDownload() {
+  if (!selected) { warn('Primero selecciona una estación'); return; }
+  if (!_loggedIn || !_sessionId) { showLoginMsg('Inicia sesión primero'); return; }
+
+  const btn = document.getElementById('btnHistDl');
+  btn.disabled = true;
+  btn.style.opacity = '0.6';
+
+  // Ocultar captcha box anterior
+  document.getElementById('histCaptchaBox').style.display = 'none';
+  document.getElementById('histCaptchaErr').style.display = 'none';
+  document.getElementById('histCaptchaInput').value = '';
+
+  // Usar el cod exacto del portal histórico (viene de map_hist_data.php, ej: '000708')
+  // No alterar el formato — SENAMHI usa 6 dígitos con sus ceros originales
+  const codRaw = (selected.cod_hist || selected.cod || '').replace(/^(ho|qc)/i, '');
+  const codPadded = codRaw; // usar tal cual, sin re-padding
+
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('resultBox').innerHTML = '';
+
+  const fromDate = document.getElementById('fromDate').value || '';
+  const toDate   = document.getElementById('toDate').value   || '';
+
+  try {
+    const r = await fetch('/api/hist_download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({session_id: _sessionId, cod_estacion: codPadded,
+                            station_name: selected.estacion,
+                            from_date: fromDate, to_date: toDate})
+    });
+    const d = await r.json();
+
+    if (d.needs_captcha && d.captcha_b64) {
+      // Step 1: mostrar captcha al usuario
+      _histDlPayload = {session_id: _sessionId, cod_estacion: codPadded,
+                        station_name: selected.estacion,
+                        from_date: fromDate, to_date: toDate};
+      // Mostrar qué campos encontró el servidor (debug)
+      if (d.form_fields) console.log('[hist] form_fields:', d.form_fields);
+      const img = document.getElementById('histCaptchaImg');
+      img.src = 'data:image/png;base64,' + d.captcha_b64;
+      document.getElementById('histCaptchaBox').style.display = 'block';
+      setTimeout(() => document.getElementById('histCaptchaInput').focus(), 50);
+      // El botón queda deshabilitado hasta que el usuario complete el captcha
+      return; // no re-habilitar el botón todavía
+    } else if (d.ok) {
+      showOk(selected.estacion, document.getElementById('fromDate').value,
+             document.getElementById('toDate').value, d.download_url, d.file);
+    } else if (d.error && d.error.includes('expirada')) {
+      _loggedIn = false;
+      setHistBtn(false);
+      document.getElementById('loginForm').style.display = 'block';
+      document.getElementById('loginStatus').style.display = 'none';
+      showLoginMsg('Sesión expirada — vuelve a iniciar sesión');
+      loadCaptcha();
+    } else {
+      showErr(d.error || 'No se pudo descargar');
+    }
+  } catch(e) {
+    showErr('Error de red: ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+async function refreshHistCaptcha() {
+  if (!_histDlPayload) return;
+  // Actualizar fechas por si el usuario las cambió
+  _histDlPayload.from_date = document.getElementById('fromDate').value || _histDlPayload.from_date || '';
+  _histDlPayload.to_date   = document.getElementById('toDate').value   || _histDlPayload.to_date   || '';
+  try {
+    const r = await fetch('/api/hist_download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_histDlPayload)
+    });
+    const d = await r.json();
+    if (d.captcha_b64) {
+      document.getElementById('histCaptchaImg').src = 'data:image/png;base64,' + d.captcha_b64;
+      document.getElementById('histCaptchaInput').value = '';
+      document.getElementById('histCaptchaErr').style.display = 'none';
+    }
+  } catch(e) {}
+}
+
+async function submitHistCaptcha() {
+  const captcha = document.getElementById('histCaptchaInput').value.trim();
+  if (!captcha) {
+    document.getElementById('histCaptchaErr').textContent = 'Ingresa el código del captcha';
+    document.getElementById('histCaptchaErr').style.display = 'block';
+    return;
+  }
+
+  const dlBtn = document.querySelector('#histCaptchaBox button[onclick="submitHistCaptcha()"]');
+  dlBtn.disabled = true;
+  dlBtn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:middle;margin-right:6px;"></span>Descargando…';
+  document.getElementById('histCaptchaErr').style.display = 'none';
+
+  // Mostrar estado de progreso debajo del captcha
+  const p = _histDlPayload || {};
+  const fromY = (p.from_date || '').slice(0,7).replace('-', '/') || '…';
+  const toY   = (p.to_date   || '').slice(0,7).replace('-', '/') || '…';
+  const stnName = p.station_name || 'estación';
+
+  let errEl = document.getElementById('histCaptchaErr');
+  errEl.style.color = 'var(--accent-2)';
+  errEl.style.display = 'block';
+
+  const steps = [
+    `⏳ Verificando código de seguridad…`,
+    `📡 Conectando con el portal histórico SENAMHI…`,
+    `📥 Solicitando datos de ${stnName} (${fromY} → ${toY})…`,
+    `📥 Descargando archivo de datos completo…`,
+    `⚙ Procesando y generando Excel…`,
+  ];
+  let stepIdx = 0;
+  errEl.textContent = steps[0];
+  const loadingInterval = setInterval(() => {
+    stepIdx = Math.min(stepIdx + 1, steps.length - 1);
+    errEl.textContent = steps[stepIdx];
+  }, 2200);
+
+  try {
+    const r = await fetch('/api/hist_do_download', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({..._histDlPayload, captcha})
+    });
+    const d = await r.json();
+
+    clearInterval(loadingInterval);
+    errEl.style.color = 'var(--accent-2)';
+
+    if (d.ok) {
+      const rowsTxt = d.rows ? ` — ${d.rows} registros diarios` : '';
+      errEl.textContent = `✅ ¡Descarga completada!${rowsTxt}`;
+      setTimeout(() => {
+        document.getElementById('histCaptchaBox').style.display = 'none';
+        const btn = document.getElementById('btnHistDl');
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        showOk((_histDlPayload && _histDlPayload.station_name) || 'Estación',
+               document.getElementById('fromDate').value,
+               document.getElementById('toDate').value, d.download_url, d.file);
+        _histDlPayload = null;
+      }, 800);
+    } else if (!d.ok && d.needs_captcha && d.captcha_b64) {
+      errEl.style.color = 'var(--error)';
+      const debugMsg = d.debug ? ` [${d.debug.slice(0,100)}]` : '';
+      errEl.textContent = '⚠ Código incorrecto — intenta de nuevo' + debugMsg;
+      document.getElementById('histCaptchaImg').src = 'data:image/png;base64,' + d.captcha_b64;
+      document.getElementById('histCaptchaInput').value = '';
+      dlBtn.disabled = false;
+      dlBtn.innerHTML = 'Descargar';
+    } else if (d.error && d.error.includes('expirada')) {
+      document.getElementById('histCaptchaBox').style.display = 'none';
+      _loggedIn = false;
+      setHistBtn(false);
+      showLoginMsg('Sesión expirada — vuelve a iniciar sesión');
+      const btn = document.getElementById('btnHistDl');
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    } else {
+      errEl.style.color = 'var(--error)';
+      errEl.textContent = d.error || 'Error al descargar';
+      dlBtn.disabled = false;
+      dlBtn.innerHTML = 'Descargar';
+    }
+  } catch(e) {
+    clearInterval(loadingInterval);
+    errEl.style.color = 'var(--error)';
+    errEl.textContent = 'Error de red: ' + e.message;
+    dlBtn.disabled = false;
+    dlBtn.textContent = 'Descargar';
+  }
+}
+
+function cancelHistCaptcha() {
+  document.getElementById('histCaptchaBox').style.display = 'none';
+  document.getElementById('histCaptchaInput').value = '';
+  _histDlPayload = null;
+  const btn = document.getElementById('btnHistDl');
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+// Cargar captcha al inicio
+loadCaptcha();
+
+// Intercambia prefijo ho <-> qc manteniendo el número intacto
+function swapPrefix(cod) {
+  if (!cod) return null;
+  if (cod.toLowerCase().startsWith('ho')) return 'qc' + cod.slice(2);
+  if (cod.toLowerCase().startsWith('qc')) return 'ho' + cod.slice(2);
+  return null;
+}
+</script>
+</body>
+</html>
