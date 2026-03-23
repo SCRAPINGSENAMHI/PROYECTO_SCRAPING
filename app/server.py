@@ -1451,7 +1451,7 @@ def api_hist_do_download():
                 if to_date:
                     df = df[df['fecha'] <= pd.Timestamp(to_date)]
 
-            output_dir = Path('g:/1_PROYECTOS/WEBSCRAPING/Web_Scraping_SENAMHI_/DATA/outputs')
+            output_dir = _get_data_dir() / 'outputs'
             output_dir.mkdir(parents=True, exist_ok=True)
             safe_name = _re2.sub(r'[^\w]', '_', station_name)
 

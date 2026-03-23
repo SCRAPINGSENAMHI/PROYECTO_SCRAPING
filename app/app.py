@@ -1200,9 +1200,11 @@ def process_all_stations(df_stations, from_date='2024-01-01', to_date='2024-12-3
 # INTERFAZ PARA DASHBOARD / USO EXTERNO
 # ----------------------------------------
 
-# Directorio de datos por defecto (puede ser reconfigurado por el dashboard)
-# Apuntar al folder DATA en la raíz del proyecto (no a app/DATA)
-DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / 'DATA'
+# Directorio de datos por defecto
+# Busca DATA/ primero como hermano de este archivo (Docker: /app/DATA)
+# y si no existe, sube un nivel (local: Web_Scraping_SENAMHI_/DATA)
+_here = Path(__file__).resolve().parent
+DEFAULT_DATA_DIR = (_here / 'DATA') if (_here / 'DATA').exists() else (_here.parent / 'DATA')
 
 def get_stations(use_local=True, local_path=None):
     """Devuelve el DataFrame de estaciones.
