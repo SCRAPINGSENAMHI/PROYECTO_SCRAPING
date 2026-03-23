@@ -30,3 +30,7 @@ app/DATA/
 
 # Logs
 *.log
+
+# Archivos temporales
+tmp_*.json
+*.tmp
