@@ -935,7 +935,7 @@ def parse_hist_txt(content):
     df = pd.DataFrame(rows)
     try:
         df['fecha'] = pd.to_datetime(df[['anio', 'mes', 'dia']].rename(
-            columns={'anio': 'year', 'mes': 'month', 'dia': 'day'}))
+            columns={'anio': 'year', 'mes': 'month', 'dia': 'day'})).dt.date
     except Exception:
         pass
     return df

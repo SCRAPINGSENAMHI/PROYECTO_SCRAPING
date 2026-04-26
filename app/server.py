@@ -271,7 +271,7 @@ def api_local_hist_download():
     xl_name = f'hist_{safe_name}_{cod_qc}.xlsx'
     xl_path = output_dir / xl_name
 
-    cols = [c for c in ['fecha', 'anio', 'mes', 'dia', 'precip_mm', 'tmax_c', 'tmin_c'] if c in df.columns]
+    cols = [c for c in ['fecha', 'precip_mm', 'tmax_c', 'tmin_c'] if c in df.columns]
     df[cols].to_excel(xl_path, index=False)
 
     return jsonify({
