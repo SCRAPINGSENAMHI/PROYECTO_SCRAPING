@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENAMHI · Monitor Hidrometeorológico</title>
+<title>Monitor Hidrometeorológico</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -33,8 +33,8 @@
     text-align:center;
   ">
     <div style="font-size:2.4rem;margin-bottom:8px">🌦</div>
-    <div style="font-size:1.15rem;font-weight:700;color:#e2f0e8;letter-spacing:0.02em">SENAMHI</div>
-    <div style="font-size:0.72rem;color:#5a8f70;margin-bottom:32px;letter-spacing:0.06em;text-transform:uppercase">Monitor Hidrometeorológico</div>
+    <div style="font-size:1.15rem;font-weight:700;color:#e2f0e8;letter-spacing:0.02em">Monitor Hidrometeorológico</div>
+    <div style="font-size:0.72rem;color:#5a8f70;margin-bottom:32px;letter-spacing:0.06em;text-transform:uppercase">Estaciones Meteorológicas – Perú</div>
 
     <div style="text-align:left;margin-bottom:14px">
       <label style="display:block;font-size:0.68rem;font-weight:600;color:#5a8f70;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px">Usuario</label>
@@ -76,7 +76,7 @@
     </button>
 
     <div style="margin-top:20px;font-size:0.62rem;color:rgba(90,143,112,0.5);letter-spacing:0.04em">
-      ACCESO RESTRINGIDO · SENAMHI PERÚ
+      ACCESO RESTRINGIDO
     </div>
   </div>
 </div>
@@ -134,8 +134,8 @@ function doLogin(){
   <div class="logo">
     <div class="logo-icon">🌦</div>
     <div>
-      <div class="logo-top">SENAMHI · Monitor Hidrometeorológico</div>
-      <div class="logo-sub">Servicio Nacional de Meteorología e Hidrología del Perú</div>
+      <div class="logo-top">Datos Hidrometeorológicos</div>
+      <div class="logo-sub">Monitor de Estaciones – Perú</div>
     </div>
   </div>
   <div class="header-right">
@@ -969,7 +969,7 @@ function _triggerFileSave(j, stationName, btn, statusEl, prevBtnText, spinner){
       _hideDlPanel(false, 'Error al descargar el archivo');
     });
   } else {
-    const msg = (j && j.error) ? j.error : 'Sin datos disponibles en SENAMHI';
+    const msg = (j && j.error) ? j.error : 'Sin datos disponibles';
     statusEl.textContent = '✕ ' + msg; statusEl.style.color = 'var(--warn)';
     _hideDlPanel(false, msg);
   }
@@ -1743,7 +1743,7 @@ document.head.appendChild(style);
 <div id="siteDownloadsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;z-index:9999">
   <div style="background:#fff;border-radius:8px;padding:18px;max-width:880px;width:92%;max-height:78vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <div style="font-weight:700">Descargas — Página antigua (senamhi.gob.pe)</div>
+      <div style="font-weight:700">Descargas disponibles</div>
       <div><button onclick="closeSiteDownloads()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:transparent">Cerrar</button></div>
     </div>
     <div id="siteDownloadsList" style="display:block;gap:8px;">

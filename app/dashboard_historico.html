@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SENAMHI · Datos Históricos</title>
+<title>Datos Históricos</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
@@ -312,7 +312,7 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 <body>
 
 <header class="app-header">
-  <a href="/" class="logo"><span class="dot"></span>SENAMHI</a>
+  <a href="/" class="logo"><span class="dot"></span>Monitor Hidrometeorológico</a>
   <div class="hd"></div>
   <span class="htitle">Datos Históricos</span>
   <div class="hspace"></div>
@@ -325,10 +325,9 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
   <div class="hero">
     <div class="hero-badge">📡 Descarga directa</div>
     <h1>Datos <span>históricos</span> por estación</h1>
-    <p>Busca una estación del catálogo oficial, selecciona el período y descarga sus datos históricos desde el portal SENAMHI.</p>
+    <p>Busca una estación del catálogo, selecciona el período y descarga sus datos históricos.</p>
     <div class="source-info">
-      <span class="source-tag">📂 Fuente estaciones: <strong id="sourceBadge">stations_hist_portal.csv</strong></span>
-      <span class="source-tag">🌐 Descarga: <strong>senamhi.gob.pe/site/descarga-datos</strong></span>
+      <span class="source-tag">📂 Fuente: <strong id="sourceBadge">catálogo local</strong></span>
     </div>
   </div>
 
@@ -468,9 +467,9 @@ async function loadStations() {
     document.getElementById('sCount').textContent = allStations.length
       ? allStations.length + ' estaciones' : '';
     // Actualizar badge de fuente
-    const src = data.source === 'csv_local' ? 'stations_hist_portal.csv'
-              : data.source === 'portal'    ? 'portal SENAMHI (live)'
-              : data.source === 'excel'     ? 'Estaciones_Meteorológicas_Peru.xlsx'
+    const src = data.source === 'csv_local' ? 'catálogo local'
+              : data.source === 'portal'    ? 'catálogo en línea'
+              : data.source === 'excel'     ? 'catálogo local (Excel)'
               : (data.source || '–');
     const badge = document.getElementById('sourceBadge');
     if (badge) badge.textContent = src;
