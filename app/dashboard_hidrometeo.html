@@ -505,8 +505,8 @@ function selectItem(el, name, type, peers) {
   // Mostrar la capa correspondiente en el mapa si existe
   if (type === 'dept') {
     if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
-    // tambien mostrar cuencas que intersectan la region seleccionada
-    try { showCuencasInDept(name); } catch(e){ console.warn('showCuencasInDept error', e); }
+    // Limpiar el sublist de cuencas (no mezclar filtros)
+    try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
     // Para dept el filtro es por nombre (sin GeoJSON), renderizar de inmediato
     try { renderTable(selectedArea); } catch(e){ console.warn('renderTable error', e); }
   } else if (type === 'cuenca') {
@@ -654,6 +654,8 @@ function switchTab(id, btn) {
   selectedArea = null;
   document.querySelectorAll('.dept-btn, .list-item').forEach(el => el.classList.remove('selected'));
 
+  // Limpiar sublist de cuencas por departamento (evitar mezcla de filtros)
+  try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
   // Solo limpiar capas y resetear estaciones — NO cargar todos los polígonos
   // Los polígonos solo se dibujan cuando el usuario elige un item específico
   if (typeof clearAllOverlays === 'function') clearAllOverlays();
