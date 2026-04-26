@@ -775,6 +775,15 @@ function renderLineChart() {
 }
 
 // ── TABLE ──
+// Versión interna: solo renderiza el HTML de la tabla, SIN llamar a plotStationsOnMap
+// Usada por fetchAndShowLayer para evitar doble render de marcadores
+function _renderTableOnly() {
+  const tbody = document.getElementById('tableBody');
+  if (!tbody) return;
+  const list = (CURRENT_VISIBLE_STATIONS !== null) ? CURRENT_VISIBLE_STATIONS : STATIONS_POOL;
+  tbody.innerHTML = _buildTableRows(list);
+}
+
 function renderTable(area) {
   const tbody = document.getElementById('tableBody');
   const norm = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim(); } catch(e) { return String(x||'').toLowerCase().trim(); } };
@@ -806,21 +815,21 @@ function renderTable(area) {
     }
   }
 
-  // update map markers to show only filtered stations
+  // Actualizar marcadores en el mapa con la lista filtrada
   try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(filtered); } catch(e){ console.warn('plotStationsOnMap error', e); }
 
-  tbody.innerHTML = filtered.map(s => {
-    // Color del dot de tipo segun tipo de estacion
+  tbody.innerHTML = _buildTableRows(filtered);
+}
+
+// Genera el HTML de las filas de la tabla sin tocar el mapa
+function _buildTableRows(list) {
+  return (list || []).map(s => {
     const tipoNormTbl = (s.tipo||'').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu,'');
     const typeClass = tipoNormTbl.includes('conv') ? 's-rt' : 's-auto';
-    const prec = (typeof s.prec === 'number') ? s.prec.toFixed(1) : (s.prec?String(s.prec):'0');
-    const temp = (typeof s.temp === 'number') ? s.temp.toFixed(1) : (s.temp?String(s.temp):'0');
-    const act = (typeof s.act === 'number') ? s.act : (s.act?Number(s.act):80);
     const escaped = (s.name||'').replace(/'/g,"\\'");
     const hasCoords = (s.lat != null && s.lon != null);
     const viewBtn = hasCoords ? `<button class="view-btn" title="Ver en mapa" onclick="focusStationOnMap('${escaped}')">&#x1F5FA;</button>` : `<span style="font-size:0.78rem;color:var(--muted)">Sin coords</span>`;
     const savedHtml = s._saved_path ? `<button class="view-saved-btn" onclick="previewSavedData('${escaped}')" style="background:none;border:0;color:var(--accent2);font-weight:600;cursor:pointer">Descargado</button>` : '';
-    // Color y texto del estado operativo
     const estadoOp = s.estadoOp || 'DESCONOCIDO';
     let estadoColor, estadoBg, estadoIcon, estadoLabel;
     if (estadoOp === 'OPERATIVA') {
@@ -839,7 +848,7 @@ function renderTable(area) {
       <td style="color:var(--muted)">${s.dept || ''}</td>
       <td style="color:var(--muted)">${s.cuenca || ''}</td>
       <td>${estadoBadge}</td>
-      <td style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${viewBtn}${ savedHtml ? savedHtml : '' }<input class="dl-from" type="date" value="2010-01-01" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha inicio"><input class="dl-to" type="date" value="${new Date().toISOString().slice(0,10)}" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha fin"><button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar</button><span class="dl-status" style="margin-left:4px"></span></td>
+      <td style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${viewBtn}${savedHtml ? savedHtml : ''}<input class="dl-from" type="date" value="2010-01-01" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha inicio"><input class="dl-to" type="date" value="${new Date().toISOString().slice(0,10)}" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha fin"><button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar</button><span class="dl-status" style="margin-left:4px"></span></td>
     </tr>`;
   }).join('');
 }
@@ -1341,36 +1350,44 @@ function clearAllOverlays() {
   }
 }
 
+// Contador de versión para cancelar operaciones obsoletas al hacer clic rápido
+let _layerVersion = 0;
+
 function fetchAndShowLayer(layer, name) {
   if (!leafletMap) initLeaflet();
 
-  // Remove any other layer groups so only the selected one remains
-  for (const k in layerGroups) {
-    if (k !== layer && layerGroups[k]) {
-      try { leafletMap.removeLayer(layerGroups[k]); } catch(e){}
-      layerGroups[k] = null;
+  // Incrementar versión: cualquier operación async con versión anterior se descarta
+  const myVersion = ++_layerVersion;
+
+  // Limpiar TODAS las capas de polígonos antes de dibujar la nueva
+  clearAllOverlays();
+
+  // Usar caché del cliente (loadGeo) — solo va al servidor la primera vez
+  loadGeo(layer).then(fullGeo => {
+    // Si el usuario ya hizo clic en otra cosa, descartar esta respuesta
+    if (myVersion !== _layerVersion) return;
+    if (!fullGeo || !Array.isArray(fullGeo.features) || fullGeo.features.length === 0) return;
+
+    // Pre-calcular bbox de todos los features (se cachea en la feature, solo se hace una vez)
+    _ensureBboxCache(fullGeo);
+
+    // Filtrar features por nombre EN EL CLIENTE (no en servidor)
+    let features = fullGeo.features;
+    if (name) {
+      function normStr(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
+      const tgt = normStr(name);
+      features = fullGeo.features.filter(f => {
+        if (!f || !f.properties) return false;
+        return Object.values(f.properties).some(v => normStr(v) === tgt || normStr(v).includes(tgt));
+      });
+      if (!features.length) features = fullGeo.features; // fallback: mostrar todo si no hay match
     }
-  }
 
-  const url = '/api/geojson?layer=' + encodeURIComponent(layer) + (name?('&name='+encodeURIComponent(name)):'');
-  fetch(url).then(r => r.json()).then(geo => {
-    if (!geo || !geo.features || geo.features.length === 0) return;
+    const geo = { type: 'FeatureCollection', features };
 
-    // replace existing group for this layer
-    if (layerGroups[layer]) {
-      try { leafletMap.removeLayer(layerGroups[layer]); } catch(e){}
-      layerGroups[layer] = null;
-    }
-
-    // Default styles for each layer (subtle)
-    const defaultStyle = (layer === 'departamentos') ? { color: '#2f6b46', weight: 2, fillOpacity: 0.06, fillColor: '#2f6b46' }
-      : (layer === 'cuencas') ? { color: '#4b7f5f', weight: 2, fillOpacity: 0.06, fillColor: '#4b7f5f' }
-      : { color: '#3e6b56', weight: 2, fillOpacity: 0.06, fillColor: '#3e6b56' };
-
-    // Highlight style when a specific feature is requested (light green translucent)
-    const highlightStyle = { color: '#5fcf8d', weight: 2, fillColor: '#9ff0be', fillOpacity: 0.35 };
-
-    // choose style depending on whether a specific name was requested
+    // Estilos
+    const highlightStyle = { color: '#5fcf8d', weight: 2.5, fillColor: '#9ff0be', fillOpacity: 0.30 };
+    const defaultStyle   = { color: '#2f6b46', weight: 1.5, fillOpacity: 0.05, fillColor: '#2f6b46' };
     const layerStyle = name ? highlightStyle : defaultStyle;
 
     layerGroups[layer] = L.geoJSON(geo, {
@@ -1378,66 +1395,62 @@ function fetchAndShowLayer(layer, name) {
       onEachFeature: function(f, lyr) {
         let title = '';
         if (layer === 'cuencas') {
-          // Para cuencas usar _getCuencaName para obtener nombre individual (campo NOMBRE)
           title = _getCuencaName(f.properties || '') || '';
         } else {
           for (const k in f.properties) {
             const lk = String(k).toLowerCase();
-            if (lk.includes('name') || lk.includes('nombre') || lk.includes('depart') || lk.includes('dpto') || lk.includes('prov') || lk.includes('est')) { title = f.properties[k]; break; }
+            if (lk.includes('name') || lk.includes('nombre') || lk.includes('depart') || lk.includes('dpto')) { title = f.properties[k]; break; }
           }
         }
         lyr.bindPopup(title || 'Area');
       }
     }).addTo(leafletMap);
 
-    // Si se ha solicitado un nombre concreto, filtrar estaciones espacialmente y mostrarlas
-    try {
-      if (name && geo.features && geo.features.length) {
-        // Pre-calcular bbox de cada feature del GeoJSON (se cachea en f._bbox)
-        _ensureBboxCache(geo);
-        // Calcular bbox total del área seleccionada para pre-filtrar estaciones rápido
-        const areaBbox = geo.features.reduce((bb, f) => {
-          const fb = f._bbox;
-          if (!fb) return bb;
-          return [Math.min(bb[0],fb[0]), Math.min(bb[1],fb[1]), Math.max(bb[2],fb[2]), Math.max(bb[3],fb[3])];
-        }, [Infinity,Infinity,-Infinity,-Infinity]);
+    // Zoom al área seleccionada
+    try { leafletMap.fitBounds(layerGroups[layer].getBounds().pad(0.08)); } catch(e){}
 
-        // Paso 1 (rápido): pre-filtrar estaciones por bbox total
-        const candidatosStn = STATIONS_POOL.filter(s => {
-          if (s.lat == null || s.lon == null) return false;
-          return _pointInBbox(Number(s.lon), Number(s.lat), areaBbox);
+    // Asegurar que marcadores de estaciones queden encima del polígono
+    try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
+
+    // Filtrar estaciones si se seleccionó un área específica
+    if (name && features.length) {
+      // Calcular bbox total del área para pre-filtrar rápido
+      const areaBbox = features.reduce((bb, f) => {
+        const fb = f._bbox;
+        if (!fb) return bb;
+        return [Math.min(bb[0],fb[0]), Math.min(bb[1],fb[1]), Math.max(bb[2],fb[2]), Math.max(bb[3],fb[3])];
+      }, [Infinity, Infinity, -Infinity, -Infinity]);
+
+      // Paso 1 rápido: pre-filtrar por bbox
+      const candidatosStn = STATIONS_POOL.filter(s => {
+        if (s.lat == null || s.lon == null) return false;
+        return _pointInBbox(Number(s.lon), Number(s.lat), areaBbox);
+      });
+
+      // Paso 2 preciso: booleanPointInPolygon — diferido con setTimeout para no bloquear UI
+      setTimeout(() => {
+        if (myVersion !== _layerVersion) return; // versión obsoleta, descartar
+        const inside = candidatosStn.filter(s => {
+          try {
+            const pt = turf.point([Number(s.lon), Number(s.lat)]);
+            return features.some(f => {
+              try {
+                if (!_pointInBbox(Number(s.lon), Number(s.lat), f._bbox)) return false;
+                return turf.booleanPointInPolygon(pt, f);
+              } catch(e) { return false; }
+            });
+          } catch(e) { return false; }
         });
-
-        // Paso 2 (pesado pero sobre subconjunto pequeño): booleanPointInPolygon
-        // Procesado en setTimeout para no bloquear la UI
-        setTimeout(() => {
-          const inside = candidatosStn.filter(s => {
-            try {
-              const pt = turf.point([Number(s.lon), Number(s.lat)]);
-              // Usar bbox de cada feature como pre-filtro adicional antes de la op. costosa
-              return geo.features.some(f => {
-                try {
-                  if (!_pointInBbox(Number(s.lon), Number(s.lat), f._bbox)) return false;
-                  return turf.booleanPointInPolygon(pt, f);
-                } catch(e) { return false; }
-              });
-            } catch(e) { return false; }
-          });
-          CURRENT_VISIBLE_STATIONS = inside;
-          plotStationsOnMap(inside);
-          try { renderTable(); } catch(e){ console.warn('renderTable error after spatial filter', e); }
-        }, 0);
-      } else {
-        CURRENT_VISIBLE_STATIONS = null;
-        plotStationsOnMap(STATIONS_POOL);
-        try { renderTable(); } catch(e){ console.warn('renderTable error reset', e); }
-      }
-    } catch(e) { console.warn('filter stations by geo error', e); }
-
-    // asegurarse que la capa de estaciones quede encima de las polígonos
-    try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e) { /* noop */ }
-
-    try { leafletMap.fitBounds(layerGroups[layer].getBounds().pad(0.1)); } catch(e){}
+        if (myVersion !== _layerVersion) return;
+        CURRENT_VISIBLE_STATIONS = inside;
+        plotStationsOnMap(inside);
+        try { _renderTableOnly(); } catch(e){}
+      }, 0);
+    } else {
+      CURRENT_VISIBLE_STATIONS = null;
+      plotStationsOnMap(STATIONS_POOL);
+      try { _renderTableOnly(); } catch(e){}
+    }
   }).catch(err => console.warn('geojson load error', err));
 }
 

@@ -684,24 +684,28 @@ def _saved_file_has_data(path):
         return False
 
 
+# Caché en memoria para los GeoJSON completos (se leen del disco solo una vez)
+_geojson_cache = {}  # layer_key -> json_string
+
 @app.route('/api/geojson')
 def api_geojson():
     layer = (request.args.get('layer') or '').lower()
-    name = request.args.get('name')
+    # El filtro por nombre ahora se hace en el cliente — el servidor siempre devuelve el layer completo
     base = _find_data_dir()
 
     if layer in ('cuencas','cuenca'):
+        layer_key = 'cuencas'
         shp_path = base / 'CUENCAS' / 'UH.shp'
     elif layer in ('sectores','zona'):
+        layer_key = 'sectores'
         shp_path = base / 'SECTOR_CLIMATICO' / 'SECTORES.shp'
     elif layer in ('departamentos','depto','dept'):
-        # prefer the specific INEI departamental shapefile if present
+        layer_key = 'departamentos'
         d = base / 'DEPARTAMENTOS'
         preferred = d / 'INEI_LIMITE_DEPARTAMENTAL_GEOGPSPERU_JUANSUYO_931381206.shp'
         if preferred.exists():
             shp_path = preferred
         else:
-            # fallback to first found
             files = list(d.glob('*.shp'))
             if not files:
                 return jsonify({'error': 'no shapefile found in DEPARTAMENTOS'}), 404
@@ -712,10 +716,16 @@ def api_geojson():
     if not shp_path.exists():
         return jsonify({'error': f'shapefile not found: {shp_path}'}), 404
 
+    # Servir desde caché si ya fue leído
+    if layer_key in _geojson_cache:
+        return app.response_class(_geojson_cache[layer_key], mimetype='application/json')
+
     try:
-        geo = shapefile_to_geojson(shp_path, filter_name=name)
+        geo = shapefile_to_geojson(shp_path, filter_name=None)
         geo = _clean_for_json(geo)
-        return app.response_class(json.dumps(geo, ensure_ascii=False), mimetype='application/json')
+        geo_str = json.dumps(geo, ensure_ascii=False)
+        _geojson_cache[layer_key] = geo_str
+        return app.response_class(geo_str, mimetype='application/json')
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
