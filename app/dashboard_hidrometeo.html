@@ -1143,6 +1143,36 @@ function loadGeo(layer){
   return fetch('/api/geojson?layer='+encodeURIComponent(layer)).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
 }
 
+// ── Bounding-box helpers para pre-filtrado rápido (evita operaciones Turf costosas) ──
+function _featureBbox(f){
+  try {
+    const coords = f && f.geometry && f.geometry.coordinates;
+    if (!coords) return null;
+    let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+    function walk(c){
+      if (!Array.isArray(c)) return;
+      if (typeof c[0]==='number'){ if(c[0]<minX)minX=c[0]; if(c[0]>maxX)maxX=c[0]; if(c[1]<minY)minY=c[1]; if(c[1]>maxY)maxY=c[1]; return; }
+      c.forEach(walk);
+    }
+    walk(coords);
+    return [minX, minY, maxX, maxY];
+  } catch(e){ return null; }
+}
+function _bboxOverlaps(a, b){
+  if (!a || !b) return true; // sin bbox → asumir solapamiento
+  return !(a[2]<b[0] || a[0]>b[2] || a[3]<b[1] || a[1]>b[3]);
+}
+function _pointInBbox(lon, lat, bbox){
+  if (!bbox) return true;
+  return lon>=bbox[0] && lon<=bbox[2] && lat>=bbox[1] && lat<=bbox[3];
+}
+
+// Pre-calcular bbox de cada feature de un FeatureCollection y cachearlo en la feature misma
+function _ensureBboxCache(geo){
+  if (!geo || !Array.isArray(geo.features)) return;
+  geo.features.forEach(f=>{ if(f && !f._bbox) f._bbox = _featureBbox(f); });
+}
+
 // Mostrar cuencas que intersectan un departamento seleccionado
 function showCuencasInDept(deptName){
   const out = document.getElementById('deptSublist');
@@ -1171,8 +1201,15 @@ function showCuencasInDept(deptName){
     }
     if (!deptFeat){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Departamento no encontrado en capas.</div>'; return; }
 
+    // Pre-calcular bbox de departamento y cuencas para pre-filtrado rápido
+    _ensureBboxCache(cuencas);
+    const deptBbox = _featureBbox(deptFeat);
+
+    // Pre-filtrar por bbox (O(n) rápido) antes de la operación Turf pesada
+    const candidatos = cuencas.features.filter(cf => cf && _bboxOverlaps(deptBbox, cf._bbox));
+
     const found = [];
-    cuencas.features.forEach(cf=>{
+    candidatos.forEach(cf=>{
       try{
         const intersects = turf.booleanIntersects(deptFeat, cf);
         if (intersects){
@@ -1188,8 +1225,8 @@ function showCuencasInDept(deptName){
     try {
       // remove previous dept cuencas layer
       if (layerGroups.cuencas_dept) { try { leafletMap.removeLayer(layerGroups.cuencas_dept); } catch(e){}; layerGroups.cuencas_dept = null; }
-      // filter original cuencas.features to those that intersect the deptFeat
-      const matchedFeatures = cuencas.features.filter(cf => {
+      // usar candidatos ya pre-filtrados por bbox
+      const matchedFeatures = candidatos.filter(cf => {
         try { return turf.booleanIntersects(deptFeat, cf); } catch(e){ return false; }
       });
       if (matchedFeatures && matchedFeatures.length) {
@@ -1359,16 +1396,40 @@ function fetchAndShowLayer(layer, name) {
     // Si se ha solicitado un nombre concreto, filtrar estaciones espacialmente y mostrarlas
     try {
       if (name && geo.features && geo.features.length) {
-        const inside = STATIONS_POOL.filter(s => {
-          try {
-            if (s.lat == null || s.lon == null) return false;
-            const pt = turf.point([Number(s.lon), Number(s.lat)]);
-            return geo.features.some(f => { try { return turf.booleanPointInPolygon(pt, f); } catch(e) { return false; } });
-          } catch(e) { return false; }
+        // Pre-calcular bbox de cada feature del GeoJSON (se cachea en f._bbox)
+        _ensureBboxCache(geo);
+        // Calcular bbox total del área seleccionada para pre-filtrar estaciones rápido
+        const areaBbox = geo.features.reduce((bb, f) => {
+          const fb = f._bbox;
+          if (!fb) return bb;
+          return [Math.min(bb[0],fb[0]), Math.min(bb[1],fb[1]), Math.max(bb[2],fb[2]), Math.max(bb[3],fb[3])];
+        }, [Infinity,Infinity,-Infinity,-Infinity]);
+
+        // Paso 1 (rápido): pre-filtrar estaciones por bbox total
+        const candidatosStn = STATIONS_POOL.filter(s => {
+          if (s.lat == null || s.lon == null) return false;
+          return _pointInBbox(Number(s.lon), Number(s.lat), areaBbox);
         });
-        CURRENT_VISIBLE_STATIONS = inside;
-        plotStationsOnMap(inside);
-        try { renderTable(); } catch(e){ console.warn('renderTable error after spatial filter', e); }
+
+        // Paso 2 (pesado pero sobre subconjunto pequeño): booleanPointInPolygon
+        // Procesado en setTimeout para no bloquear la UI
+        setTimeout(() => {
+          const inside = candidatosStn.filter(s => {
+            try {
+              const pt = turf.point([Number(s.lon), Number(s.lat)]);
+              // Usar bbox de cada feature como pre-filtro adicional antes de la op. costosa
+              return geo.features.some(f => {
+                try {
+                  if (!_pointInBbox(Number(s.lon), Number(s.lat), f._bbox)) return false;
+                  return turf.booleanPointInPolygon(pt, f);
+                } catch(e) { return false; }
+              });
+            } catch(e) { return false; }
+          });
+          CURRENT_VISIBLE_STATIONS = inside;
+          plotStationsOnMap(inside);
+          try { renderTable(); } catch(e){ console.warn('renderTable error after spatial filter', e); }
+        }, 0);
       } else {
         CURRENT_VISIBLE_STATIONS = null;
         plotStationsOnMap(STATIONS_POOL);
