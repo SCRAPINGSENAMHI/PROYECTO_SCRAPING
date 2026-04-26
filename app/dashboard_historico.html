@@ -794,26 +794,24 @@ function _applyStation(s, gIdx) {
     `<tr><td>${l}</td><td>${esc(String(v))}</td></tr>`).join('');
   document.getElementById('stnInfoCard').style.display = 'block';
 
-  // Botón convertir local
-  const hasLocal2 = localCodes.has(s.cod_qc);
+  // Botón convertir — habilitado siempre que haya cod_qc (el servidor confirma si existe el archivo)
+  const hasLocal2 = localCodes.size > 0 ? localCodes.has(s.cod_qc) : !!s.cod_qc;
   const btnConv   = document.getElementById('btnConvert');
   const btnSub    = document.getElementById('btnConvertSub');
   const localInfo    = document.getElementById('localDataInfo');
   const noLocalInfo  = document.getElementById('noLocalDataInfo');
-  if (hasLocal2) {
+  if (s.cod_qc) {
     btnConv.disabled    = false;
     btnConv.style.opacity = '1';
     btnConv.style.cursor  = 'pointer';
     if (btnSub) btnSub.textContent = `Convertir ${s.cod_qc}.txt → Excel`;
-    if (localInfo)   localInfo.style.display   = 'block';
-    if (noLocalInfo) noLocalInfo.style.display = 'none';
+    if (localInfo)   localInfo.style.display   = hasLocal2 ? 'block' : 'none';
+    if (noLocalInfo) noLocalInfo.style.display = hasLocal2 ? 'none'  : 'none';
   } else {
     btnConv.disabled    = true;
     btnConv.style.opacity = '0.45';
     btnConv.style.cursor  = 'not-allowed';
-    if (btnSub) btnSub.textContent = 'Sin datos locales en DATA/HISTORICA/';
-    if (localInfo)   localInfo.style.display   = 'none';
-    if (noLocalInfo) noLocalInfo.style.display = 'block';
+    if (btnSub) btnSub.textContent = 'Estación sin código QC asignado';
   }
 
   // ── MAPA: volar a la estación y resaltar marcador ──
