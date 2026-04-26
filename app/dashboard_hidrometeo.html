@@ -1271,91 +1271,6 @@ function _ensureBboxCache(geo){
   geo.features.forEach(f=>{ if(f && !f._bbox) f._bbox = _featureBbox(f); });
 }
 
-// Mostrar cuencas que intersectan un departamento seleccionado
-function showCuencasInDept(deptName){
-  const out = document.getElementById('deptSublist');
-  out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Buscando cuencas...</div>';
-  Promise.all([loadGeo('departamentos'), loadGeo('cuencas')]).then(([depts, cuencas]) => {
-    if (!depts || !Array.isArray(depts.features) || !cuencas || !Array.isArray(cuencas.features)){
-      out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No hay datos geográficos.</div>';
-      return;
-    }
-    // encontrar feature del depto por matching de propiedades (más tolerante)
-    function norm(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
-    const target = norm(deptName);
-    let deptFeat = null;
-    // 1) exact equality
-    deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v)===target));
-    // 2) inclusion (property contains deptName)
-    if (!deptFeat) deptFeat = depts.features.find(f=> f && f.properties && Object.values(f.properties).some(v=> norm(v).includes(target)));
-    // 3) token overlap (split words)
-    if (!deptFeat){
-      const toks = target.split(/\s+/).filter(Boolean);
-      deptFeat = depts.features.find(f=>{
-        if (!f || !f.properties) return false;
-        const vals = Object.values(f.properties).map(v=>norm(v));
-        return toks.every(t=> vals.some(v=> v.includes(t)));
-      });
-    }
-    if (!deptFeat){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Departamento no encontrado en capas.</div>'; return; }
-
-    // Pre-calcular bbox de departamento y cuencas para pre-filtrado rápido
-    _ensureBboxCache(cuencas);
-    const deptBbox = _featureBbox(deptFeat);
-
-    // Pre-filtrar por bbox (O(n) rápido) antes de la operación Turf pesada
-    const candidatos = cuencas.features.filter(cf => cf && _bboxOverlaps(deptBbox, cf._bbox));
-
-    const found = [];
-    candidatos.forEach(cf=>{
-      try{
-        const intersects = turf.booleanIntersects(deptFeat, cf);
-        if (intersects){
-          // Usar _getCuencaName para consistencia: prioriza campo NOMBRE (cuencas individuales)
-          const nm = _getCuencaName(cf.properties || {});
-          if (nm) found.push(nm);
-        }
-      }catch(e){ /* ignore feature errors */ }
-    });
-    const uniq = Array.from(new Set(found)).sort((a,b)=> a.localeCompare(b,'es'));
-    if (!uniq.length){ out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">No se encontraron cuencas dentro del departamento.</div>'; return; }
-    // Also render the intersecting cuencas on the map as a separate overlay
-    try {
-      // remove previous dept cuencas layer
-      if (layerGroups.cuencas_dept) { try { leafletMap.removeLayer(layerGroups.cuencas_dept); } catch(e){}; layerGroups.cuencas_dept = null; }
-      // usar candidatos ya pre-filtrados por bbox
-      const matchedFeatures = candidatos.filter(cf => {
-        try { return turf.booleanIntersects(deptFeat, cf); } catch(e){ return false; }
-      });
-      if (matchedFeatures && matchedFeatures.length) {
-        const geo = { type: 'FeatureCollection', features: matchedFeatures };
-        layerGroups.cuencas_dept = L.geoJSON(geo, { style: { color: '#5fcf8d', weight: 2, fillColor: '#9ff0be', fillOpacity: 0.25 } }).addTo(leafletMap);
-        try { leafletMap.fitBounds(layerGroups.cuencas_dept.getBounds().pad(0.12)); } catch(e){}
-      }
-    } catch(e) { console.warn('Error mostrando cuencas en mapa', e); }
-
-    // render small buttons
-    out.innerHTML = '';
-    const wrap = document.createElement('div');
-    wrap.style.display='grid'; wrap.style.gridTemplateColumns='1fr'; wrap.style.gap='6px';
-    uniq.forEach(nm=>{
-      const b = document.createElement('button');
-      b.className='dept-btn';
-      b.style.fontSize='0.78rem';
-      b.textContent = nm;
-      b.onclick = ()=>{
-        // select as cuenca
-        // remove selected on cuenca list and set selection
-        document.querySelectorAll('#cuencaList .dept-btn').forEach(el=>el.classList.remove('selected'));
-        b.classList.add('selected');
-        selectedArea = nm; selectedAreaType='cuenca';
-        fetchAndShowLayer('cuencas', nm);
-      };
-      wrap.appendChild(b);
-    });
-    out.appendChild(wrap);
-  }).catch(err=>{ console.warn('showCuencasInDept error', err); out.innerHTML = '<div style="padding:6px;color:var(--muted);font-size:0.82rem">Error buscando cuencas.</div>'; });
-}
 
 function plotStationsOnMap(stations) {
   if (!leafletMap) initLeaflet();
@@ -1465,7 +1380,6 @@ const layerGroups = {
   departamentos: null,
   cuencas: null,
   sectores: null,
-  cuencas_dept: null
 };
 
 function clearAllOverlays() {
