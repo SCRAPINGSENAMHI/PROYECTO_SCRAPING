@@ -286,6 +286,11 @@ function doLogin(){
 </div>
 <style>
 @keyframes dlPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.8);}}
+.stn-popup-hidro .leaflet-popup-content-wrapper{
+  background:rgba(10,18,28,0.96)!important;border:1px solid rgba(77,166,255,0.22)!important;
+  color:#c9d8e8!important;border-radius:10px!important;box-shadow:0 8px 24px rgba(0,0,0,0.65)!important;}
+.stn-popup-hidro .leaflet-popup-tip{background:rgba(10,18,28,0.96)!important;}
+.stn-popup-hidro .leaflet-popup-close-button{color:#6b8aaa!important;}
 </style>
 
 <script>
@@ -1389,7 +1394,6 @@ function plotStationsOnMap(stations) {
     const opts = { radius: STATION_RADIUS, color: '#111827', weight:0.8, fillColor: color, fillOpacity:0.95 }; 
     try { opts.pane = 'stationsPane'; } catch(e){}
     const marker = L.circleMarker([s.lat, s.lon], opts);
-    // Decodificar tipo de sensor a descripción legible
     const SENSOR_LABELS = {
       'PLU':'Pluviométrica','HLM':'Hidrométrica','CO':'Climatológica Ordinaria',
       'CP':'Climatológica Principal','HLG':'Hidrológica','MAP':'Meteorológica Auto.',
@@ -1397,28 +1401,35 @@ function plotStationsOnMap(stations) {
       'EAMA':'Agrometeorológica Auto.','EHMA':'Hidrometeorológica Auto.','EAA':'Agroclimática Auto.'
     };
     const SENSOR_VARS = {
-      'PLU':'Precipitación','HLM':'Nivel / Caudal','CO':'Precip · Temp · Humedad · Viento',
-      'CP':'Precip · Temp · Humedad · Viento · Evap','HLG':'Nivel / Caudal',
-      'MAP':'Precipitación','PE':'Precipitación','EHA':'Nivel / Caudal auto.',
+      'PLU':'Precipitación','HLM':'Nivel · Caudal','CO':'Precip · Temp · Humedad · Viento',
+      'CP':'Precip · Temp · Humedad · Viento · Evap','HLG':'Nivel · Caudal',
+      'MAP':'Precipitación','PE':'Precipitación','EHA':'Nivel · Caudal auto.',
       'EMA':'Temp · Humedad · Viento · Rad. Solar','EAMA':'Agrometeorología completa',
       'EHMA':'Hidro + Meteo automático','EAA':'Agroclimatología'
     };
     const sensorCode = (s.tipoSensor || '').toUpperCase();
-    const sensorLabel = SENSOR_LABELS[sensorCode] || (s.tipoSensor ? s.tipoSensor : (s.tipo || ''));
+    const sensorLabel = SENSOR_LABELS[sensorCode] || (s.tipoSensor ? s.tipoSensor : (s.tipo || '—'));
     const sensorVars  = SENSOR_VARS[sensorCode]  || '—';
-    const altStr = s.altitud != null ? `<tr><td style="color:#99b7d1">Altitud</td><td><strong>${s.altitud.toLocaleString()} m.s.n.m.</strong></td></tr>` : '';
+    const isAprox = (s.alt_fuente === 'DEM_local');
+    const altRow = s.altitud != null
+      ? `<div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Altitud:</span> <strong>${s.altitud.toLocaleString()} m.s.n.m.</strong>${isAprox ? ' <span style="color:#f59e0b;font-size:0.7rem">(aprox. DEM)</span>' : ''}</div>`
+      : '';
     const popup = `
-      <div style="min-width:200px">
-        <div style="font-weight:700;font-size:0.95rem;color:${color};margin-bottom:4px">${s.name}</div>
-        <div style="font-size:0.8rem;color:#99b7d1;margin-bottom:8px">${s.dept || ''}${s.cuenca ? ' · ' + s.cuenca : ''}</div>
-        <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
-          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Tipo</td><td><strong>${sensorLabel}</strong></td></tr>
-          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Variables</td><td>${sensorVars}</td></tr>
-          ${altStr}
-          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Estado</td><td><strong>${s.estadoOp || '—'}</strong></td></tr>
-        </table>
+      <div style="min-width:200px;font-family:\'Inter\',sans-serif">
+        <div style="font-weight:700;font-size:0.9rem;color:${color};margin-bottom:3px">${s.name}</div>
+        <div style="font-size:0.78rem;color:#99b7d1;margin-bottom:7px">${s.dept || ''}${s.cuenca ? ' · ' + s.cuenca : ''}${s.cod ? ' · Cód: ' + s.cod : ''}</div>
+        <div style="font-size:0.78rem;line-height:1.7">
+          <span style="color:#99b7d1">Tipo:</span> <strong>${sensorLabel}</strong>
+        </div>
+        <div style="font-size:0.78rem;line-height:1.7">
+          <span style="color:#99b7d1">Variables:</span> ${sensorVars}
+        </div>
+        ${altRow}
+        <div style="font-size:0.78rem;line-height:1.7">
+          <span style="color:#99b7d1">Estado:</span> <strong>${s.estadoOp || '—'}</strong>
+        </div>
       </div>`;
-    marker.bindPopup(popup);
+    marker.bindPopup(popup, { maxWidth: 280, className: 'stn-popup-hidro' });
     marker.on('click', () => {
       document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
       renderTable(s.dept || 'ÁREA');

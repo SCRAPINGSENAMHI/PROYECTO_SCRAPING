@@ -688,17 +688,19 @@ function renderMapMarkers() {
       color:     hasLocal ? '#22c55e' : '#1e4f30',
       weight: 1, opacity: 0.9, fillOpacity: 0.8
     }).addTo(map);
-    const altLabel = s.altitud != null ? `<br><span style="color:#aaa">Altitud: ${Number(s.altitud).toLocaleString()} m.s.n.m.</span>` : '';
+    const isAprox = s.alt_fuente === 'DEM_local';
+    const altRow = s.altitud != null
+      ? `<div style="font-size:0.78rem;line-height:1.7"><span style="color:#aaa">Altitud:</span> <strong>${Number(s.altitud).toLocaleString()} m.s.n.m.</strong>${isAprox ? ' <span style="color:#f59e0b;font-size:0.7rem">(aprox. DEM)</span>' : ''}</div>`
+      : '';
     const popupHtml = `
-      <div style="min-width:180px;font-family:'Inter',sans-serif">
+      <div style="min-width:190px;font-family:'Inter',sans-serif">
         <div style="font-weight:700;font-size:0.9rem;color:#5fcf8d;margin-bottom:3px">${s.estacion}</div>
         <div style="font-size:0.78rem;color:#aaa;margin-bottom:6px">${s.departamento || ''} · Cód: ${s.cod || '—'}</div>
-        <div style="font-size:0.78rem;line-height:1.6">
-          <span style="color:#aaa">Variables:</span> <strong>Precip · Tmax · Tmin</strong>${altLabel}
-        </div>
+        <div style="font-size:0.78rem;line-height:1.7"><span style="color:#aaa">Variables:</span> <strong>Precip · Tmax · Tmin</strong></div>
+        ${altRow}
         ${hasLocal ? '<div style="margin-top:6px;font-size:0.72rem;color:#22c55e">💾 Datos descargados localmente</div>' : ''}
       </div>`;
-    m.bindPopup(popupHtml, { maxWidth: 260, className: 'stn-popup' });
+    m.bindPopup(popupHtml, { maxWidth: 270, className: 'stn-popup' });
     m.bindTooltip(s.estacion, {
       permanent: false, direction: 'top', className: 'stn-tooltip'
     });
