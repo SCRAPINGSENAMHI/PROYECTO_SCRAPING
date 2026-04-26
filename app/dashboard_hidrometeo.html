@@ -1430,9 +1430,12 @@ function plotStationsOnMap(stations) {
         </div>
       </div>`;
     marker.bindPopup(popup, { maxWidth: 280, className: 'stn-popup-hidro' });
+    // IMPORTANTE: NO llamar renderTable/plotStationsOnMap desde aquí
+    // porque plotStationsOnMap hace clearLayers() y destruye el marcador
+    // antes de que Leaflet pueda abrir el popup.
+    // Solo actualizamos el breadcrumb sin tocar el mapa.
     marker.on('click', () => {
-      document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
-      renderTable(s.dept || 'ÁREA');
+      try { document.getElementById('bc-area').textContent = s.dept || 'ÁREA'; } catch(e){}
     });
     marker.addTo(stationsLayer);
     try { if (marker.bringToFront) marker.bringToFront(); } catch(e){}
@@ -1495,15 +1498,40 @@ function fetchAndShowLayer(layer, name) {
     _ensureBboxCache(fullGeo);
 
     // Filtrar features por nombre EN EL CLIENTE (no en servidor)
+    function normStr(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
     let features = fullGeo.features;
     if (name) {
-      function normStr(s){ try{ return String(s||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); }catch(e){ return String(s||'').toLowerCase().trim(); } }
       const tgt = normStr(name);
+      // 1º: coincidencia exacta
       features = fullGeo.features.filter(f => {
         if (!f || !f.properties) return false;
-        return Object.values(f.properties).some(v => normStr(v) === tgt || normStr(v).includes(tgt));
+        return Object.values(f.properties).some(v => normStr(v) === tgt);
       });
-      if (!features.length) features = fullGeo.features; // fallback: mostrar todo si no hay match
+      // 2º: el valor contiene al nombre (ej "PROV. CONST. DEL CALLAO" contiene "callao")
+      if (!features.length) {
+        features = fullGeo.features.filter(f => {
+          if (!f || !f.properties) return false;
+          return Object.values(f.properties).some(v => tgt.length >= 3 && normStr(v).includes(tgt));
+        });
+      }
+      // 3º: el nombre contiene al valor (ej "MADRE DE DIOS" está en el nombre buscado)
+      if (!features.length) {
+        features = fullGeo.features.filter(f => {
+          if (!f || !f.properties) return false;
+          return Object.values(f.properties).some(v => { const nv = normStr(v); return nv.length >= 4 && tgt.includes(nv); });
+        });
+      }
+      // Sin match: filtrar estaciones por dept sin dibujar polígono
+      if (!features.length) {
+        console.warn('fetchAndShowLayer: sin polígono para "' + name + '" en capa ' + layer);
+        if (layer === 'departamentos') {
+          const tgtNorm = tgt;
+          CURRENT_VISIBLE_STATIONS = STATIONS_POOL.filter(s => normStr(s.dept||'') === tgtNorm);
+          plotStationsOnMap(CURRENT_VISIBLE_STATIONS);
+          try { _renderTableOnly(); } catch(e){}
+        }
+        return;
+      }
     }
 
     const geo = { type: 'FeatureCollection', features };
