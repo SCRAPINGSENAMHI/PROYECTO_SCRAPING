@@ -189,7 +189,7 @@ function doLogin(){
     <!-- TOPBAR -->
     <div class="topbar">
       <div class="selection-breadcrumb" id="breadcrumb">
-        PERÚ &rsaquo; <span id="bc-area">TODOS LOS DEPARTAMENTOS</span> &rsaquo; <span id="bc-var">PRECIPITACIÓN</span>
+        PERÚ &rsaquo; <span id="bc-area">TODOS LOS DEPARTAMENTOS</span>
       </div>
       <!-- view-toggle removed as requested -->
       <div class="topbar-actions">
@@ -375,9 +375,9 @@ fetch('/api/stations')
       // re-render table to show saved links
       try{ renderTable(selectedArea || 'TODOS'); }catch(e){/*ignore*/}
     }).catch(e=>console.warn('No outputs list available', e));
-    // Luego renderiza tabla y KPIs si las funciones existen
+    // Renderizar tabla y actualizar badge de estaciones
     try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
-    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+    try { updateEstCountBadge(); } catch(e){}
   })
   .catch(err => {
     console.warn('No se pudo obtener estaciones desde API:', err);
@@ -388,7 +388,7 @@ fetch('/api/stations')
     if (typeof initLeaflet === 'function') initLeaflet();
     if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
     try { renderTable(selectedArea || 'TODOS'); } catch(e) { console.warn('renderTable error', e); }
-    try { if (typeof updateKPIs === 'function') updateKPIs(selectedArea || 'PERÚ'); } catch(e){ console.warn('updateKPIs error', e); }
+    try { updateEstCountBadge(); } catch(e){}
   });
 
 // ── STATE ──
@@ -485,11 +485,9 @@ function selectItem(el, name, type, peers) {
     // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
     if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores', name);
   }
-  // Actualizar breadcrumb
-  try {
-    document.getElementById('bc-area').textContent = name;
-    document.getElementById('map-dept-label').textContent = name.toUpperCase();
-  } catch(e){}
+  // Actualizar breadcrumb y badge del mapa
+  try { document.getElementById('bc-area').textContent = name; } catch(e){}
+  try { document.getElementById('map-dept-label').textContent = name.toUpperCase(); } catch(e){}
 }
 
 buildDeptGrid();
@@ -647,61 +645,24 @@ function applyFilters() {
     (selectedAreaType === 'dept' ? 'TODOS LOS DEPARTAMENTOS' :
      selectedAreaType === 'cuenca' ? 'TODAS LAS CUENCAS' : 'TODOS LOS SECTORES');
 
-  const varEl = document.querySelector('.chips .chip.on[onclick*="var"]') ||
-                document.querySelector('#varChips .chip.on');
-  // pick from active var chip
-  const activeVar = [...document.querySelectorAll('.chips .chip.on')]
-    .find(c => ['Precipitación','Temperatura','Caudal','Humedad','Viento'].includes(c.textContent));
-  const varLabel = activeVar ? activeVar.textContent.toUpperCase() : 'PRECIPITACIÓN';
-
-  document.getElementById('bc-area').textContent = areaLabel;
-  document.getElementById('bc-var').textContent = varLabel;
-
-  updateKPIs(areaLabel);
-  renderBarChart();
-  renderLineChart();
+  try { document.getElementById('bc-area').textContent = areaLabel; } catch(e){}
+  updateEstCountBadge();
   renderTable(areaLabel);
 }
 
-function rnd(min, max, dec=1) { return +(Math.random()*(max-min)+min).toFixed(dec); }
-
-function updateKPIs(area) {
-  const prec = rnd(0, 80);
-  const temp = rnd(8, 34);
-  const caudal = rnd(50, 2000, 0);
-  const total = rnd(40, 120, 0);
-  const active = Math.floor(total * rnd(0.7, 1.0));
-
-  animVal('kpi-prec', 0, prec, 1);
-  animVal('kpi-temp', 0, temp, 1);
-  animVal('kpi-caudal', 0, caudal, 0);
-  animVal('kpi-est', 0, active, 0);
-  document.getElementById('kpi-est-total').textContent = total;
-
-  const up = Math.random() > 0.4;
-  document.getElementById('kpi-prec-d').textContent = (up ? '↑ +' : '↓ -') + rnd(1,20) + '% vs. período anterior';
-  document.getElementById('kpi-prec-d').className = 'kpi-delta ' + (up ? 'up' : 'down');
-  document.getElementById('kpi-temp-d').textContent = '↑ +' + rnd(0,3) + '°C vs. normal';
-  document.getElementById('kpi-caudal-d').textContent = (Math.random()>0.5?'↑':'↓') + ' ' + rnd(0,15) + '% vs. ayer';
-  document.getElementById('kpi-est-d').textContent = (active/total*100).toFixed(0) + '% operatividad';
-  document.getElementById('est-count-badge').textContent = active + ' Estaciones';
-}
-
-function animVal(id, from, to, dec) {
-  const el = document.getElementById(id);
-  const steps = 30, dur = 600;
-  let step = 0;
-  const iv = setInterval(() => {
-    step++;
-    const v = from + (to - from) * (step/steps);
-    el.textContent = v.toFixed(dec);
-    if (step >= steps) { el.textContent = to.toFixed(dec); clearInterval(iv); }
-  }, dur/steps);
+// ── ACTUALIZA CONTADOR DE ESTACIONES (badge "X Estaciones") ──
+function updateEstCountBadge() {
+  const list = CURRENT_VISIBLE_STATIONS !== null ? CURRENT_VISIBLE_STATIONS : STATIONS_POOL;
+  const total = list.length;
+  const activas = list.filter(s => s && (s.estadoOp === 'OPERATIVA' || s.estadoOp === 'PARCIAL')).length;
+  const pct = total > 0 ? Math.round(activas / total * 100) : 0;
+  try { document.getElementById('est-count-badge').textContent = total + ' Estaciones · ' + pct + '% operativas'; } catch(e){}
 }
 
 // ── BAR CHART ──
 function renderBarChart() {
   const svg = document.getElementById('barChart');
+  if (!svg) return;
   const W = 320, H = 130, pad = {l:30,r:10,t:10,b:30};
   const vals = Array.from({length:14}, () => rnd(0, 40));
   const max = Math.max(...vals, 1);
@@ -736,6 +697,7 @@ function renderBarChart() {
 // ── LINE CHART ──
 function renderLineChart() {
   const svg = document.getElementById('lineChart');
+  if (!svg) return;
   const W = 320, H = 130, pad = {l:30,r:10,t:12,b:28};
   const months = ['Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic','Ene'];
   const vals = months.map(() => rnd(5, 90));
@@ -775,13 +737,21 @@ function renderLineChart() {
 }
 
 // ── TABLE ──
-// Versión interna: solo renderiza el HTML de la tabla, SIN llamar a plotStationsOnMap
-// Usada por fetchAndShowLayer para evitar doble render de marcadores
+// Versión interna: solo renderiza el HTML de la tabla y actualiza el badge,
+// SIN llamar a plotStationsOnMap (evita doble render de marcadores en el mapa)
 function _renderTableOnly() {
   const tbody = document.getElementById('tableBody');
   if (!tbody) return;
   const list = (CURRENT_VISIBLE_STATIONS !== null) ? CURRENT_VISIBLE_STATIONS : STATIONS_POOL;
   tbody.innerHTML = _buildTableRows(list);
+  updateEstCountBadge();
+  // Actualizar breadcrumb área
+  try {
+    const areaLabel = selectedArea ||
+      (selectedAreaType === 'dept' ? 'TODOS LOS DEPARTAMENTOS' :
+       selectedAreaType === 'cuenca' ? 'TODAS LAS CUENCAS' : 'TODOS LOS SECTORES');
+    document.getElementById('bc-area').textContent = areaLabel;
+  } catch(e){}
 }
 
 function renderTable(area) {
@@ -819,6 +789,7 @@ function renderTable(area) {
   try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(filtered); } catch(e){ console.warn('plotStationsOnMap error', e); }
 
   tbody.innerHTML = _buildTableRows(filtered);
+  updateEstCountBadge();
 }
 
 // Genera el HTML de las filas de la tabla sin tocar el mapa
@@ -889,17 +860,7 @@ function previewSavedData(stationName){
 function applySavedToDashboard(preview){
   // store current saved data summary and monthly series
   window.CURRENT_SAVED = preview || null;
-  // update KPIs using sample stats if available
-  if (preview && preview.monthly && preview.monthly.length){
-    const vals = preview.monthly.map(m=>m.value).filter(v=>v!=null);
-    const prec = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
-    animVal('kpi-prec', 0, prec, 1);
-    animVal('kpi-temp', 0, prec/3, 1);
-    animVal('kpi-caudal', 0, prec*10, 0);
-    animVal('kpi-est', 0, Math.min(120, Math.round((preview.rows/10)||50)), 0);
-    document.getElementById('kpi-est-total').textContent = Math.max(1, Math.round(preview.rows/10));
-    document.getElementById('kpi-prec-d').textContent = 'Datos cargados desde archivo';
-  }
+  // KPIs eliminados del HTML — no se actualizan aquí
   // update charts to show monthly if present
   try{ renderBarChartWithData(preview && preview.monthly ? preview.monthly.slice(-14) : null); }catch(e){ console.warn(e); }
   try{ renderLineChartWithData(preview && preview.monthly ? preview.monthly.slice(-12) : null); }catch(e){ console.warn(e); }
@@ -1308,7 +1269,6 @@ function plotStationsOnMap(stations) {
     marker.bindPopup(popup);
     marker.on('click', () => {
       document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
-      updateKPIs(s.dept || 'ÁREA');
       renderTable(s.dept || 'ÁREA');
     });
     marker.addTo(stationsLayer);
@@ -1449,7 +1409,7 @@ function fetchAndShowLayer(layer, name) {
     } else {
       CURRENT_VISIBLE_STATIONS = null;
       plotStationsOnMap(STATIONS_POOL);
-      try { _renderTableOnly(); } catch(e){}
+      _renderTableOnly();
     }
   }).catch(err => console.warn('geojson load error', err));
 }
@@ -1477,7 +1437,9 @@ function focusStationOnMap(stationName){
   }
 }
 
-applyFilters();
+// Inicialización: actualizar breadcrumb y badge con estado inicial (sin datos aún)
+try { document.getElementById('bc-area').textContent = 'TODOS LOS DEPARTAMENTOS'; } catch(e){}
+try { document.getElementById('est-count-badge').textContent = '-- Estaciones'; } catch(e){}
 
 // Volver a la vista normal: todas las estaciones, sin filtros
 function resetToNormalView(){
@@ -1494,6 +1456,9 @@ function resetToNormalView(){
   }
   if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
   if (typeof renderTable === 'function') renderTable();
+  try { document.getElementById('bc-area').textContent = 'TODOS LOS DEPARTAMENTOS'; } catch(e){}
+  try { document.getElementById('map-dept-label').textContent = 'PERÚ COMPLETO'; } catch(e){}
+  updateEstCountBadge();
 }
 
 // Download all stations from Maestra (heavy operation). Shows modal with results.
