@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SENAMHI · Datos Históricos</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <style>
 :root {
   --bg:#060f0a; --bg-2:#0d2a1e;
@@ -269,6 +270,17 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 ::-webkit-scrollbar{width:5px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px;}
+
+/* ── MAP ── */
+#stnMap{height:280px;margin-top:14px;border-radius:var(--r);
+  overflow:hidden;border:1px solid var(--border-2);}
+.leaflet-container{background:#060f0a!important;}
+.stn-tooltip{background:rgba(6,15,10,0.92)!important;border:1px solid var(--border-2)!important;
+  color:var(--text)!important;font-size:0.75rem!important;font-family:'Inter',sans-serif!important;
+  border-radius:6px!important;padding:4px 9px!important;box-shadow:0 4px 16px rgba(0,0,0,0.5)!important;}
+.stn-tooltip::before{display:none!important;}
+.leaflet-control-zoom a{background:rgba(6,20,12,0.9)!important;color:var(--accent-2)!important;
+  border-color:var(--border-2)!important;}
 </style>
 </head>
 <body>
@@ -289,7 +301,7 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
     <h1>Datos <span>históricos</span> por estación</h1>
     <p>Busca una estación del catálogo oficial, selecciona el período y descarga sus datos históricos desde el portal SENAMHI.</p>
     <div class="source-info">
-      <span class="source-tag">📂 Fuente estaciones: <strong>Estaciones_Meteorológicas_Peru.xlsx</strong></span>
+      <span class="source-tag">📂 Fuente estaciones: <strong id="sourceBadge">stations_hist_portal.csv</strong></span>
       <span class="source-tag">🌐 Descarga: <strong>senamhi.gob.pe/site/descarga-datos</strong></span>
     </div>
   </div>
@@ -308,6 +320,9 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
       <span class="s-count" id="sCount"></span>
       <div class="dropdown" id="dropdown"></div>
     </div>
+
+    <!-- MAPA INTERACTIVO -->
+    <div id="stnMap"></div>
 
     <!-- ESTACIÓN SELECCIONADA -->
     <div class="stn-card" id="stnCard">
@@ -584,6 +599,7 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 
 </main>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ── STATE ──
 let allStations = [];
@@ -594,23 +610,91 @@ let pollTimer = null;
 let pPct = 0;
 let pInterval = null;
 
+// ── MAP STATE ──
+let map = null;
+let markerByIdx = {};   // globalIdx -> L.circleMarker
+let prevSelIdx  = null;
+let localCodes  = new Set();
+
 // ── INIT ──
 const now = new Date();
 document.getElementById('toDate').value = now.toISOString().slice(0,10);
-loadStations();
 checkOldDate();
+loadStations();
 
 async function loadStations() {
   document.getElementById('sCount').textContent = '…';
+
+  // Cargar códigos locales en paralelo (no bloquea)
+  fetch('/api/hist_local_index')
+    .then(r => r.ok ? r.json() : null)
+    .then(d => {
+      if (d && d.ok) {
+        localCodes = new Set(d.codes);
+        // Re-renderizar marcadores si el mapa ya está listo
+        if (map) renderMapMarkers();
+      }
+    })
+    .catch(() => {});
+
   try {
     const res = await fetch('/api/stations_historico');
     const data = res.ok ? await res.json() : {};
     allStations = (data.ok && Array.isArray(data.stations)) ? data.stations : [];
-    document.getElementById('sCount').textContent = allStations.length ? allStations.length + ' estaciones' : '';
+    document.getElementById('sCount').textContent = allStations.length
+      ? allStations.length + ' estaciones' : '';
+    // Actualizar badge de fuente
+    const src = data.source === 'csv_local' ? 'stations_hist_portal.csv'
+              : data.source === 'portal'    ? 'portal SENAMHI (live)'
+              : data.source === 'excel'     ? 'Estaciones_Meteorológicas_Peru.xlsx'
+              : (data.source || '–');
+    const badge = document.getElementById('sourceBadge');
+    if (badge) badge.textContent = src;
   } catch(e) {
     document.getElementById('sCount').textContent = 'error';
     allStations = [];
   }
+  initMap();
+}
+
+// ── MAP ──
+function initMap() {
+  if (map) { renderMapMarkers(); return; }
+  map = L.map('stnMap', {
+    center: [-9.5, -75.0],
+    zoom: 5,
+    zoomControl: true,
+    attributionControl: false
+  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19
+  }).addTo(map);
+  renderMapMarkers();
+}
+
+function renderMapMarkers() {
+  if (!map) return;
+  Object.values(markerByIdx).forEach(m => m.remove());
+  markerByIdx = {};
+  allStations.forEach((s, i) => {
+    if (s.lat == null || s.lon == null) return;
+    const hasLocal = localCodes.has(s.cod_qc);
+    const m = L.circleMarker([s.lat, s.lon], {
+      radius: 4,
+      fillColor: hasLocal ? '#5fcf8d' : '#3a7d52',
+      color:     hasLocal ? '#22c55e' : '#1e4f30',
+      weight: 1, opacity: 0.9, fillOpacity: 0.8
+    }).addTo(map);
+    m.bindTooltip(s.estacion, {
+      permanent: false, direction: 'top', className: 'stn-tooltip'
+    });
+    m.on('click', () => {
+      document.getElementById('searchInput').value = s.estacion;
+      closeDD();
+      _applyStation(s, i);
+    });
+    markerByIdx[i] = m;
+  });
 }
 
 // ── SEARCH ──
@@ -637,14 +721,19 @@ function doSearch() {
   focusIdx = -1;
   if (!filtered.length) { showDD('<div class="dd-msg">Sin resultados</div>'); return; }
 
-  showDD(filtered.map((s,i) => `
+  showDD(filtered.map((s,i) => {
+    const hasLocal = localCodes.has(s.cod_qc);
+    const localBadge = hasLocal
+      ? '<span style="color:#22c55e;font-size:0.68rem;margin-left:5px;">💾 local</span>' : '';
+    return `
     <div class="dd-item" data-i="${i}" onmousedown="pickStation(${i})" onmouseenter="setFocus(${i})">
       <span style="font-size:1rem">🌦</span>
       <div>
-        <div class="dd-name">${esc(s.estacion)}</div>
-        <div class="dd-meta">${esc(s.cod)} · ${s.lat?.toFixed(3)}, ${s.lon?.toFixed(3)}${s.altitud!=null?' · '+s.altitud+' m':''}</div>
+        <div class="dd-name">${esc(s.estacion)}${localBadge}</div>
+        <div class="dd-meta">${esc(s.cod||'–')} · ${esc(s.departamento||'')} · ${s.lat?.toFixed(3)}, ${s.lon?.toFixed(3)}</div>
       </div>
-    </div>`).join(''));
+    </div>`;
+  }).join(''));
 }
 
 function showDD(html) {
@@ -672,36 +761,75 @@ document.addEventListener('click', e => {
 function pickStation(i) {
   const s = filtered[i];
   if (!s) return;
-  selected = s;
   document.getElementById('searchInput').value = s.estacion;
   closeDD();
+  const gIdx = allStations.findIndex(x => x.cod === s.cod && x.estacion === s.estacion);
+  _applyStation(s, gIdx);
+}
+
+function _applyStation(s, gIdx) {
+  selected = s;
+  const hasLocal = localCodes.has(s.cod_qc);
 
   document.getElementById('stnName').textContent = s.estacion;
-  document.getElementById('stnDetail').textContent =
-    `Código: ${s.cod||'–'} · Lat: ${s.lat?.toFixed(4)} · Lon: ${s.lon?.toFixed(4)}${s.altitud!=null?' · Altitud: '+s.altitud+' m':''}`;
+  const localTag = hasLocal
+    ? ' <span style="color:#22c55e;font-size:0.7rem;font-weight:600;">💾 datos locales</span>' : '';
+  document.getElementById('stnDetail').innerHTML =
+    `Código: ${esc(s.cod||'–')} · ${esc(s.departamento||'')}` +
+    ` · Lat: ${s.lat?.toFixed(4)} · Lon: ${s.lon?.toFixed(4)}${localTag}`;
   document.getElementById('stnCard').classList.add('show');
 
   // Info table
-  const codAlt = s.cod_alt || swapPrefix(s.cod);
   const rows = [
-    ['Nombre', s.estacion],
-    ['Código (Excel / ho)', s.cod||'–'],
-    ['Código (Portal / qc)', codAlt||'–'],
-    ['Latitud', s.lat?.toFixed(5)+'°'],
-    ['Longitud', s.lon?.toFixed(5)+'°'],
-    ['Altitud', s.altitud!=null ? s.altitud+' m.s.n.m.' : '–'],
-    ['Tipo', s.categoria||'Meteorológica'],
+    ['Nombre',       s.estacion],
+    ['Código portal', s.cod||'–'],
+    ['Archivo QC',   s.cod_qc||'–'],
+    ['Archivo HO',   s.cod_ho||'–'],
+    ['Departamento', s.departamento||'–'],
+    ['Latitud',      s.lat?.toFixed(5)+'°'],
+    ['Longitud',     s.lon?.toFixed(5)+'°'],
+    ['Tipo',         s.categoria||'Convencional'],
+    ['Datos locales', hasLocal ? '✅ Disponible en DATA/HISTORICA' : '–'],
   ];
   document.getElementById('stnInfoTable').innerHTML = rows.map(([l,v])=>
     `<tr><td>${l}</td><td>${esc(String(v))}</td></tr>`).join('');
   document.getElementById('stnInfoCard').style.display = 'block';
 
-  // Mostrar instrucciones con nombre y código del portal
-  document.getElementById('sgName').textContent = s.estacion;
-  document.getElementById('sgCod').textContent = (s.cod_alt || swapPrefix(s.cod) || s.cod || 'qc00000000') + '.txt';
-  document.getElementById('stepsGuide').style.display = 'block';
+  // Steps guide (si existe en el HTML)
+  const sgName = document.getElementById('sgName');
+  const sgCod  = document.getElementById('sgCod');
+  const stepsGuide = document.getElementById('stepsGuide');
+  if (sgName) sgName.textContent = s.estacion;
+  if (sgCod)  sgCod.textContent  = (s.cod_qc || s.cod || 'qcNNNNNNNN') + '.txt';
+  if (stepsGuide) stepsGuide.style.display = 'block';
 
-  // Reset results
+  // ── MAPA: volar a la estación y resaltar marcador ──
+  if (map && s.lat != null && s.lon != null) {
+    map.flyTo([s.lat, s.lon], 10, {duration: 1.0});
+    // Restaurar marcador anterior
+    if (prevSelIdx !== null && markerByIdx[prevSelIdx]) {
+      const ps = allStations[prevSelIdx];
+      const ph = localCodes.has(ps?.cod_qc);
+      markerByIdx[prevSelIdx].setStyle({
+        radius: 4,
+        fillColor: ph ? '#5fcf8d' : '#3a7d52',
+        color:     ph ? '#22c55e' : '#1e4f30',
+        weight: 1
+      });
+    }
+    // Resaltar el nuevo
+    if (gIdx >= 0 && markerByIdx[gIdx]) {
+      markerByIdx[gIdx].setStyle({
+        radius: 9,
+        fillColor: '#fbbf24',
+        color: '#f59e0b',
+        weight: 2
+      });
+      markerByIdx[gIdx].bringToFront();
+      prevSelIdx = gIdx;
+    }
+  }
+
   resetResults();
 }
 
@@ -710,9 +838,23 @@ function clearStation() {
   document.getElementById('searchInput').value = '';
   document.getElementById('stnCard').classList.remove('show');
   document.getElementById('stnInfoCard').style.display = 'none';
-  document.getElementById('stepsGuide').style.display = 'none';
+  const stepsGuide = document.getElementById('stepsGuide');
+  if (stepsGuide) stepsGuide.style.display = 'none';
   document.getElementById('searchInput').focus();
   resetResults();
+  // Restaurar marcador anterior y volver a vista general
+  if (prevSelIdx !== null && markerByIdx[prevSelIdx]) {
+    const ps = allStations[prevSelIdx];
+    const ph = localCodes.has(ps?.cod_qc);
+    markerByIdx[prevSelIdx].setStyle({
+      radius: 4,
+      fillColor: ph ? '#5fcf8d' : '#3a7d52',
+      color:     ph ? '#22c55e' : '#1e4f30',
+      weight: 1
+    });
+    prevSelIdx = null;
+  }
+  if (map) map.flyTo([-9.5, -75.0], 5, {duration: 1.0});
 }
 
 // ── DATES ──

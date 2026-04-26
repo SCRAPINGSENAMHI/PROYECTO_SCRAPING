@@ -112,14 +112,44 @@ def api_stations_historico():
     """
     Lista de estaciones del portal histórico de SENAMHI.
 
-    Fuente primaria : map_hist_data.php (stationList embebido en JS, ~570 estaciones)
+    Fuente primaria : stations_hist_portal.csv (catálogo local, ~570 estaciones)
+    Fuente secundaria: map_hist_data.php (scraping portal SENAMHI)
     Fuente fallback : Estaciones_Meteorológicas_Peru.xlsx (237 estaciones, DMS)
 
     Cada estación incluye:
-      estacion, cod (portal), cod_qc (qcNNNNNNNN), cod_ho (hoNNNNNNNN),
-      lat, lon, departamento/altitud, categoria
+      estacion, cod, cod_qc (qcNNNNNNNN), cod_ho (hoNNNNNNNN),
+      lat, lon, departamento, categoria
     """
-    # ── Intentar fuente primaria: portal map_hist_data.php ──
+    base = _find_data_dir()
+
+    # ── Fuente primaria: CSV local stations_hist_portal.csv ──
+    csv_path = base / 'stations_hist_portal.csv'
+    if csv_path.exists():
+        try:
+            df = pd.read_csv(csv_path)
+            stations = []
+            for _, row in df.iterrows():
+                s = {}
+                for k, v in row.items():
+                    if isinstance(v, float) and math.isnan(v):
+                        s[k] = None
+                    else:
+                        s[k] = v
+                try:
+                    s['lat'] = float(s['lat']) if s.get('lat') is not None else None
+                except Exception:
+                    s['lat'] = None
+                try:
+                    s['lon'] = float(s['lon']) if s.get('lon') is not None else None
+                except Exception:
+                    s['lon'] = None
+                stations.append(s)
+            if stations:
+                return jsonify({'ok': True, 'total': len(stations), 'source': 'csv_local', 'stations': stations})
+        except Exception as e:
+            print(f"api_stations_historico: CSV read failed: {e}")
+
+    # ── Fuente secundaria: portal map_hist_data.php ──
     mod = scraper or _load_scraper_module()
     stations = []
     source = 'unknown'
@@ -135,7 +165,6 @@ def api_stations_historico():
     # ── Fallback: Excel local con DMS ──
     if not stations:
         try:
-            base = _find_data_dir()
             excel_path = base / 'Estaciones_Meteorológicas_Peru.xlsx'
             if excel_path.exists():
                 df = pd.read_excel(excel_path, header=None)
@@ -173,6 +202,24 @@ def api_stations_historico():
             return jsonify({'ok': False, 'error': str(e), 'tb': traceback.format_exc()}), 500
 
     return jsonify({'ok': True, 'total': len(stations), 'source': source, 'stations': stations})
+
+
+@app.route('/api/hist_local_index')
+def api_hist_local_index():
+    """
+    Escanea DATA/HISTORICA/ y devuelve todos los códigos qc* disponibles localmente.
+    Los archivos están organizados en subcarpetas por departamento:
+      DATA/HISTORICA/LIMA/qc00000708.txt  →  código 'qc00000708'
+    """
+    base = _find_data_dir()
+    hist_dir = base / 'HISTORICA'
+    codes = []
+    if hist_dir.exists() and hist_dir.is_dir():
+        for dept_dir in sorted(hist_dir.iterdir()):
+            if dept_dir.is_dir():
+                for f in sorted(dept_dir.glob('qc*.txt')):
+                    codes.append(f.stem)   # ej: 'qc00000708'
+    return jsonify({'ok': True, 'count': len(codes), 'codes': codes})
 
 
 @app.route('/api/debug_scraper')
