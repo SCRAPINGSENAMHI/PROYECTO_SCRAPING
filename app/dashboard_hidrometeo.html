@@ -264,6 +264,29 @@ function doLogin(){
 
 </div>
 
+<!-- ── PANEL DE PROGRESO DE DESCARGA (flotante, esquina inferior derecha) ── -->
+<div id="dlProgressPanel" style="
+  display:none;position:fixed;bottom:24px;right:24px;z-index:9000;
+  width:340px;background:rgba(6,15,10,0.97);
+  border:1px solid rgba(95,207,141,0.35);border-radius:14px;
+  box-shadow:0 8px 40px rgba(0,0,0,0.7);font-family:'Inter',sans-serif;overflow:hidden;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;border-bottom:1px solid rgba(255,255,255,0.06)">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span id="dlProgressDot" style="width:8px;height:8px;border-radius:50%;background:#5fcf8d;display:inline-block;animation:dlPulse 1s infinite"></span>
+      <span style="font-size:0.8rem;font-weight:700;color:#e2f0e8">Descargando datos</span>
+    </div>
+    <span id="dlProgressStation" style="font-size:0.72rem;color:#5fcf8d;font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+  </div>
+  <div style="height:3px;background:rgba(255,255,255,0.05)">
+    <div id="dlProgressBar" style="height:100%;background:linear-gradient(90deg,#2f6b46,#5fcf8d);width:5%;transition:width 0.5s ease;border-radius:2px"></div>
+  </div>
+  <div id="dlProgressLog" style="padding:10px 14px;max-height:160px;overflow-y:auto;font-size:0.71rem;line-height:1.75;color:#a0bfaa;font-family:'Courier New',monospace;word-break:break-all;"></div>
+  <div id="dlProgressFooter" style="display:none;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.78rem;font-weight:600;align-items:center;gap:8px;"></div>
+</div>
+<style>
+@keyframes dlPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.8);}}
+</style>
+
 <script>
 // ── DATA ──────────────────────────────────────────────
 const DEPTS = [
@@ -939,29 +962,121 @@ function _triggerFileSave(j, stationName, btn, statusEl, prevBtnText, spinner){
       a.download = j.file || (stationName + '.xlsx');
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 60000);
-      statusEl.textContent = '✓ Descargado'; statusEl.style.color = 'var(--accent2)';
+      statusEl.textContent = '✓ Descargado'; statusEl.style.color = '#22c55e';
+      _hideDlPanel(true, 'Archivo guardado: ' + (j.file || stationName + '.xlsx'));
     }).catch(err => {
-      statusEl.textContent = 'Error descarga'; statusEl.style.color = 'var(--warn)';
+      statusEl.textContent = '✕ Error descarga'; statusEl.style.color = 'var(--warn)';
+      _hideDlPanel(false, 'Error al descargar el archivo');
     });
   } else {
-    const msg = (j && j.error) ? j.error : 'Error';
-    statusEl.textContent = msg; statusEl.style.color = 'var(--warn)';
+    const msg = (j && j.error) ? j.error : 'Sin datos disponibles en SENAMHI';
+    statusEl.textContent = '✕ ' + msg; statusEl.style.color = 'var(--warn)';
+    _hideDlPanel(false, msg);
   }
+}
+
+// ── PANEL DE PROGRESO GLOBAL ──
+let _dlPanel = null;
+let _dlPanelBar = null;
+let _dlPanelLog = null;
+let _dlPanelStation = null;
+let _dlPanelFooter = null;
+let _dlPanelDot = null;
+let _dlSeenLogs = 0;       // cuántos logs ya mostramos (evita duplicados)
+let _dlEstimatedMonths = 0; // estimación de meses a descargar para la barra
+
+function _initDlPanel() {
+  _dlPanel        = document.getElementById('dlProgressPanel');
+  _dlPanelBar     = document.getElementById('dlProgressBar');
+  _dlPanelLog     = document.getElementById('dlProgressLog');
+  _dlPanelStation = document.getElementById('dlProgressStation');
+  _dlPanelFooter  = document.getElementById('dlProgressFooter');
+  _dlPanelDot     = document.getElementById('dlProgressDot');
+}
+
+function _showDlPanel(stationName, fromDate, toDate) {
+  if (!_dlPanel) _initDlPanel();
+  _dlSeenLogs = 0;
+  // Estimar meses entre fechas para la barra de progreso
+  try {
+    const d1 = new Date(fromDate), d2 = new Date(toDate);
+    _dlEstimatedMonths = Math.max(1, (d2.getFullYear()-d1.getFullYear())*12 + (d2.getMonth()-d1.getMonth()) + 1);
+  } catch(e) { _dlEstimatedMonths = 60; }
+  _dlPanelStation.textContent = stationName;
+  _dlPanelLog.innerHTML = '';
+  _dlPanelBar.style.width = '5%';
+  _dlPanelBar.style.background = 'linear-gradient(90deg,#2f6b46,#5fcf8d)';
+  _dlPanelFooter.style.display = 'none';
+  _dlPanelDot.style.animation = 'dlPulse 1s infinite';
+  _dlPanelDot.style.background = '#5fcf8d';
+  _dlPanel.style.display = 'block';
+}
+
+function _updateDlPanelLogs(logs) {
+  if (!_dlPanelLog || !Array.isArray(logs)) return;
+  const newLogs = logs.slice(_dlSeenLogs);
+  if (!newLogs.length) return;
+  _dlSeenLogs = logs.length;
+  newLogs.forEach(line => {
+    const div = document.createElement('div');
+    // Colorear según tipo de línea
+    if (line.startsWith('  +')) {
+      div.style.color = '#5fcf8d'; // verde: datos encontrados
+    } else if (line.startsWith('  -') || line.includes('sin datos')) {
+      div.style.color = '#5a8f70'; // gris-verde: sin datos ese mes
+    } else if (line.startsWith('  !') || line.toLowerCase().includes('error')) {
+      div.style.color = '#f59e0b'; // amarillo: advertencia
+    } else if (line.startsWith('  >')) {
+      div.style.color = '#a0bfaa'; // neutro: info
+    } else {
+      div.style.color = '#a0bfaa';
+    }
+    div.textContent = line;
+    _dlPanelLog.appendChild(div);
+  });
+  // Auto-scroll al fondo
+  _dlPanelLog.scrollTop = _dlPanelLog.scrollHeight;
+  // Actualizar barra de progreso basada en meses procesados
+  const mesesProcesados = logs.filter(l => l.startsWith('  +') || l.startsWith('  -')).length;
+  const pct = Math.min(95, 5 + Math.round((mesesProcesados / _dlEstimatedMonths) * 90));
+  _dlPanelBar.style.width = pct + '%';
+}
+
+function _hideDlPanel(success, msg) {
+  if (!_dlPanel) return;
+  _dlPanelBar.style.width = '100%';
+  _dlPanelDot.style.animation = 'none';
+  if (success) {
+    _dlPanelDot.style.background = '#22c55e';
+    _dlPanelBar.style.background = '#22c55e';
+    _dlPanelFooter.innerHTML = '<span style="color:#22c55e">✓</span> <span style="color:#e2f0e8">' + (msg || 'Descarga completada') + '</span>';
+  } else {
+    _dlPanelDot.style.background = '#ef4444';
+    _dlPanelBar.style.background = '#ef4444';
+    _dlPanelFooter.innerHTML = '<span style="color:#ef4444">✕</span> <span style="color:#e2f0e8">' + (msg || 'Sin datos disponibles') + '</span>';
+  }
+  _dlPanelFooter.style.display = 'flex';
+  // Cerrar automáticamente tras 6 segundos
+  setTimeout(() => { if (_dlPanel) _dlPanel.style.display = 'none'; }, 6000);
 }
 
 function _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner){
   fetch('/api/job_status/' + jobId)
     .then(r => r.json())
     .then(j => {
+      // Mostrar logs en el panel en tiempo real
+      if (j.logs && j.logs.length) _updateDlPanelLogs(j.logs);
+
       if (j.status === 'pending'){
-        setTimeout(() => _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner), 2000);
+        setTimeout(() => _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner), 1500);
       } else if (j.status === 'done'){
         _triggerFileSave(j.result, stationName, btn, statusEl, prevBtnText, spinner);
       } else {
         const msg = j.error || 'Error en descarga';
         btn.innerHTML = prevBtnText; btn.style.minWidth = ''; btn.disabled = false; btn.classList.remove('loading');
         try { statusEl.removeChild(spinner); } catch(e){}
-        statusEl.textContent = msg; statusEl.style.color = 'var(--warn)';
+        statusEl.textContent = '✕ ' + msg; statusEl.style.color = 'var(--warn)';
+        _hideDlPanel(false, msg);
       }
     }).catch(() => {
       setTimeout(() => _pollJobStatus(jobId, stationName, btn, statusEl, prevBtnText, spinner), 3000);
@@ -979,19 +1094,23 @@ function downloadStation(stationName, btn){
   }
   btn.disabled = true; btn.classList.add('loading');
   const prevBtnText = btn.innerHTML;
-  btn.innerHTML = '😉 Espera un ratón...';
+  btn.innerHTML = '⏳ Descargando...';
   btn.style.minWidth = btn.offsetWidth + 'px';
   const spinner = document.createElement('span');
   spinner.className = 'spinner';
   statusEl.innerHTML = '';
   statusEl.appendChild(spinner);
+  statusEl.style.color = 'var(--text-2)';
 
   const today = new Date().toISOString().slice(0, 10);
-  // Leer fechas del mini-picker adjunto al botón si existe, sino usar defecto
   const fromInput = btn.parentNode.querySelector('.dl-from');
   const toInput   = btn.parentNode.querySelector('.dl-to');
   const fromDate  = (fromInput && fromInput.value) ? fromInput.value : '2010-01-01';
   const toDate    = (toInput   && toInput.value)   ? toInput.value   : today;
+
+  // Mostrar panel de progreso flotante
+  _showDlPanel(stationName, fromDate, toDate);
+
   const payload = { station_name: stationName, from_date: fromDate, to_date: toDate, use_local: true };
   if (btn.dataset.cod)    payload.station_code    = btn.dataset.cod;
   if (btn.dataset.tipo)   payload.tipo            = btn.dataset.tipo;
@@ -1002,10 +1121,8 @@ function downloadStation(stationName, btn){
     .then(r => r.json())
     .then(j => {
       if (j.job_id){
-        // Descarga asíncrona — comenzar polling
         _pollJobStatus(j.job_id, stationName, btn, statusEl, prevBtnText, spinner);
       } else {
-        // Respuesta inmediata (error de portal o respuesta síncrona de fallback)
         const restore = () => {
           btn.innerHTML = prevBtnText; btn.style.minWidth = '';
           btn.disabled = false; btn.classList.remove('loading');
@@ -1015,15 +1132,17 @@ function downloadStation(stationName, btn){
         if (j.saved){
           _triggerFileSave(j, stationName, btn, statusEl, prevBtnText, spinner);
         } else {
-          const msg = (j && j.error) ? j.error : 'Error';
-          setTimeout(() => { statusEl.textContent = msg; statusEl.style.color = 'var(--warn)'; }, 1500);
+          const msg = (j && j.error) ? j.error : 'Sin datos';
+          statusEl.textContent = '✕ ' + msg; statusEl.style.color = 'var(--warn)';
+          _hideDlPanel(false, msg);
         }
       }
     }).catch(err=>{
       btn.innerHTML = prevBtnText; btn.style.minWidth = '';
       btn.disabled = false; btn.classList.remove('loading');
       try { statusEl.removeChild(spinner); } catch(e){}
-      statusEl.textContent = String(err || 'Error de red'); statusEl.style.color = 'var(--warn)';
+      statusEl.textContent = '✕ Error de red'; statusEl.style.color = 'var(--warn)';
+      _hideDlPanel(false, 'Error de red');
       console.warn('downloadStation error', err);
     });
 }
