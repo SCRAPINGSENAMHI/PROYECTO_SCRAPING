@@ -624,17 +624,14 @@ function switchTab(id, btn) {
   selectedArea = null;
   document.querySelectorAll('.dept-btn, .list-item').forEach(el => el.classList.remove('selected'));
 
-  // Mostrar la capa completa correspondiente al tab seleccionado
-  if (id === 'dept') {
-    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos');
-    document.getElementById('map-dept-label').textContent = 'TODOS LOS DEPARTAMENTOS';
-  } else if (id === 'cuenca') {
-    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas');
-    document.getElementById('map-dept-label').textContent = 'TODAS LAS CUENCAS';
-  } else if (id === 'zona') {
-    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('sectores');
-    document.getElementById('map-dept-label').textContent = 'TODOS LOS SECTORES CLIMÁTICOS';
-  }
+  // Solo limpiar capas y resetear estaciones — NO cargar todos los polígonos
+  // Los polígonos solo se dibujan cuando el usuario elige un item específico
+  if (typeof clearAllOverlays === 'function') clearAllOverlays();
+  CURRENT_VISIBLE_STATIONS = null;
+  if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
+  try { renderTable(); } catch(e){}
+  const labels = { dept: 'TODOS LOS DEPARTAMENTOS', cuenca: 'TODAS LAS CUENCAS', zona: 'TODOS LOS SECTORES CLIMÁTICOS' };
+  document.getElementById('map-dept-label').textContent = labels[id] || '';
 }
 
 // ── CHIPS ──
