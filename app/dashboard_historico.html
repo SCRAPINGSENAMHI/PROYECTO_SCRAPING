@@ -445,6 +445,7 @@ let map = null;
 let markerByIdx = {};   // globalIdx -> L.circleMarker
 let prevSelIdx  = null;
 let localCodes  = new Set();
+let geoLayer    = null;  // polygon overlay for selected area
 
 // ── INIT ──
 const now = new Date();
@@ -461,6 +462,17 @@ async function loadStations() {
         localCodes = new Set(d.codes);
         // Re-renderizar marcadores si el mapa ya está listo
         if (map) renderMapMarkers();
+        // Re-habilitar boton si ya hay estacion seleccionada con datos locales
+        if (selected && localCodes.has(selected.cod_qc)) {
+          const _btn = document.getElementById('btnConvert');
+          const _sub = document.getElementById('btnConvertSub');
+          _btn.disabled = false; _btn.style.opacity = '1'; _btn.style.cursor = 'pointer';
+          if (_sub) _sub.textContent = 'Convertir ' + selected.cod_qc + '.txt -> Excel';
+          const _li = document.getElementById('localDataInfo');
+          const _ni = document.getElementById('noLocalDataInfo');
+          if (_li) _li.style.display = 'block';
+          if (_ni) _ni.style.display = 'none';
+        }
       }
     })
     .catch(() => {});
@@ -487,7 +499,7 @@ async function loadStations() {
 
 // ── FILTROS ──
 let activeFilter = { type: null, value: null };
-let geoData = { cuenca: null, sector: null };
+let geoData = { dept: null, cuenca: null, sector: null };
 
 function switchFilter(type, btnEl) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -495,8 +507,17 @@ function switchFilter(type, btnEl) {
   ['dept','cuenca','sector'].forEach(t => {
     document.getElementById(`fpanel-${t}`).classList.toggle('active', t === type);
   });
+  if (type === 'dept'   && !geoData.dept)   loadDeptGeo();
   if (type === 'cuenca' && !geoData.cuenca) loadGeoFilter('cuenca');
   if (type === 'sector' && !geoData.sector) loadGeoFilter('sector');
+}
+
+async function loadDeptGeo() {
+  try {
+    const r = await fetch('/api/geojson?layer=departamentos');
+    geoData.dept = await r.json();
+    if (activeFilter.type === 'dept' && activeFilter.value) applyFilter();
+  } catch(e) {}
 }
 
 function buildDeptChips() {
@@ -587,13 +608,18 @@ function filterGeoByName(geoAll, name) {
   if (!geoAll) return null;
   const feats = (geoAll.features || []).filter(f => {
     const p = f.properties || {};
-    const n = p.NOMBRE || p.nombre || p.NOM || p.NAME || Object.values(p)[0] || '';
+    const n = p.NOMBDEP || p.NOMBRE || p.nombre || p.NOM || p.NAME || Object.values(p)[0] || '';
     return n === name;
   });
   return { type: 'FeatureCollection', features: feats };
 }
 
 function applyFilter() {
+  if (!map) return;
+  // Remove old polygon overlay
+  if (geoLayer) { geoLayer.remove(); geoLayer = null; }
+  const POLY_STYLE = { color: '#5fcf8d', weight: 2, fillColor: '#2f6b46',
+                       fillOpacity: 0.13, interactive: false };
   let visibleIdx;
   if (!activeFilter.type) {
     visibleIdx = allStations.map((_, i) => i);
@@ -601,8 +627,12 @@ function applyFilter() {
     visibleIdx = allStations
       .map((s, i) => s.departamento === activeFilter.value ? i : -1)
       .filter(i => i >= 0);
+    if (geoData.dept) {
+      const geo = filterGeoByName(geoData.dept, activeFilter.value);
+      if (geo && geo.features.length)
+        geoLayer = L.geoJSON(geo, { style: POLY_STYLE }).addTo(map);
+    } else { loadDeptGeo(); }
   } else {
-    // Filtro espacial (cuenca o sector)
     const geoFiltered = filterGeoByName(geoData[activeFilter.type], activeFilter.value);
     if (!geoFiltered || !geoFiltered.features.length) {
       visibleIdx = allStations.map((_, i) => i);
@@ -611,18 +641,17 @@ function applyFilter() {
         if (s.lat == null || s.lon == null) return -1;
         return pointInGeoJSON(s.lon, s.lat, geoFiltered) ? i : -1;
       }).filter(i => i >= 0);
+      geoLayer = L.geoJSON(geoFiltered, { style: POLY_STYLE }).addTo(map);
     }
   }
-
-  // Mostrar/ocultar marcadores
-  Object.entries(markerByIdx).forEach(([idx, m]) => {
-    const show = visibleIdx.includes(parseInt(idx));
-    if (show && !map.hasLayer(m)) m.addTo(map);
-    else if (!show && map.hasLayer(m)) m.remove();
-  });
-
-  // Ajustar vista
-  if (activeFilter.type && visibleIdx.length > 0) {
+  if (visibleIdx) {
+    Object.entries(markerByIdx).forEach(([idx, m]) => {
+      const show = visibleIdx.includes(parseInt(idx));
+      if (show && !map.hasLayer(m)) m.addTo(map);
+      else if (!show && map.hasLayer(m)) m.remove();
+    });
+  }
+  if (activeFilter.type && visibleIdx && visibleIdx.length > 0) {
     const pts = visibleIdx.map(i => allStations[i]).filter(s => s.lat && s.lon);
     if (pts.length) {
       const lats = pts.map(s => s.lat), lons = pts.map(s => s.lon);
@@ -655,6 +684,7 @@ function initMap() {
   }).addTo(map);
   renderMapMarkers();
   buildDeptChips();
+  loadDeptGeo();
 }
 
 function renderMapMarkers() {
