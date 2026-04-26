@@ -454,28 +454,12 @@ loadStations();
 async function loadStations() {
   document.getElementById('sCount').textContent = '…';
 
-  // Cargar códigos locales en paralelo (no bloquea)
-  fetch('/api/hist_local_index')
-    .then(r => r.ok ? r.json() : null)
-    .then(d => {
-      if (d && d.ok) {
-        localCodes = new Set(d.codes);
-        // Re-renderizar marcadores si el mapa ya está listo
-        if (map) renderMapMarkers();
-        // Re-habilitar boton si ya hay estacion seleccionada con datos locales
-        if (selected && localCodes.has(selected.cod_qc)) {
-          const _btn = document.getElementById('btnConvert');
-          const _sub = document.getElementById('btnConvertSub');
-          _btn.disabled = false; _btn.style.opacity = '1'; _btn.style.cursor = 'pointer';
-          if (_sub) _sub.textContent = 'Convertir ' + selected.cod_qc + '.txt -> Excel';
-          const _li = document.getElementById('localDataInfo');
-          const _ni = document.getElementById('noLocalDataInfo');
-          if (_li) _li.style.display = 'block';
-          if (_ni) _ni.style.display = 'none';
-        }
-      }
-    })
-    .catch(() => {});
+  // Cargar códigos locales PRIMERO (await) para evitar race condition con el botón
+  try {
+    const lr = await fetch('/api/hist_local_index');
+    const ld = lr.ok ? await lr.json() : null;
+    if (ld && ld.ok) localCodes = new Set(ld.codes);
+  } catch(e) {}
 
   try {
     const res = await fetch('/api/stations_historico');
