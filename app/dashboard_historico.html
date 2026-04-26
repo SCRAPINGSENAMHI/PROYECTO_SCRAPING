@@ -367,29 +367,6 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
     </div>
   </div>
 
-  <!-- 2. FECHAS -->
-  <div class="card">
-    <div class="card-title">📅 2. Período de descarga</div>
-    <div class="date-row">
-      <div>
-        <div class="field-label">Desde</div>
-        <input class="date-input" id="fromDate" type="date" value="2020-01-01">
-      </div>
-      <div>
-        <div class="field-label">Hasta</div>
-        <input class="date-input" id="toDate" type="date">
-      </div>
-    </div>
-    <div class="presets">
-      <span style="font-size:0.72rem;color:var(--muted);align-self:center">Rápido:</span>
-      <button class="preset-btn" onclick="setYears(1)">1 año</button>
-      <button class="preset-btn" onclick="setYears(3)">3 años</button>
-      <button class="preset-btn" onclick="setYears(5)">5 años</button>
-      <button class="preset-btn" onclick="setYears(10)">10 años</button>
-      <button class="preset-btn" onclick="setYears(20)">20 años</button>
-    </div>
-  </div>
-
   <!-- 3. DESCARGAR -->
   <div class="card">
     <div class="card-title">⬇ 3. Descargar datos</div>
@@ -447,8 +424,6 @@ let filtered = [];
 let selected = null;
 let focusIdx = -1;
 let pollTimer = null;
-let pPct = 0;
-let pInterval = null;
 
 // ── MAP STATE ──
 let map = null;
@@ -458,8 +433,6 @@ let localCodes  = new Set();
 
 // ── INIT ──
 const now = new Date();
-document.getElementById('toDate').value = now.toISOString().slice(0,10);
-checkOldDate();
 loadStations();
 
 async function loadStations() {
@@ -864,178 +837,11 @@ function clearStation() {
   if (map) map.flyTo([-9.5, -75.0], 5, {duration: 1.0});
 }
 
-// ── DATES ──
-function setYears(n) {
-  const to = new Date();
-  const from = new Date();
-  from.setFullYear(from.getFullYear() - n);
-  document.getElementById('fromDate').value = from.toISOString().slice(0,10);
-  document.getElementById('toDate').value = to.toISOString().slice(0,10);
-  checkOldDate();
-}
-
-function checkOldDate() {
-  const from = document.getElementById('fromDate').value;
-  const warn = document.getElementById('oldDataWarn');
-  if (!warn) return;
-  // Mostrar advertencia si el año inicio es antes de 2015
-  warn.style.display = (from && from < '2015-01-01') ? 'block' : 'none';
-}
-
-document.getElementById('fromDate').addEventListener('change', checkOldDate);
-document.getElementById('toDate').addEventListener('change', checkOldDate);
 
 // ── PORTAL BUTTON ──
 function onPortalClick(e) {
   // Always open the portal; no need to check station
   // (it's a public page, user navigates manually)
-}
-
-// ── DIRECT DOWNLOAD ──
-// Los códigos del Excel usan prefijo 'ho' (ej: ho00000708).
-// El portal SENAMHI usa 'qc' para el mismo número (ej: qc00000708).
-// Enviamos ambos al backend: station_code = cod principal,
-// station_code_alt = variante qc, para que el sistema pruebe los dos.
-async function startDirect() {
-  if (!selected) { warn('Primero selecciona una estación'); return; }
-  const from = document.getElementById('fromDate').value;
-  const to = document.getElementById('toDate').value;
-  if (!from || !to || from > to) { warn('Selecciona un período válido'); return; }
-
-  const stn = selected;
-  setDownloading(true, stn.estacion);
-
-  // Construir ambas variantes de código (ho <-> qc)
-  const codMain = stn.cod || '';
-  const codAlt  = stn.cod_alt || swapPrefix(stn.cod);
-
-  try {
-    const res = await fetch('/api/save_by_name', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        station_name: stn.estacion,
-        station_code: codAlt || codMain,   // preferir qc (variante portal)
-        station_code_ho: codMain,           // código ho (Excel)
-        from_date: from,
-        to_date: to,
-        use_local: true
-      })
-    });
-    const data = await res.json();
-    if (data.job_id) {
-      animProg(1);
-      pollJob(data.job_id, stn.estacion, from, to);
-    } else {
-      setDownloading(false);
-      if (data.saved && data.download_url) showOk(stn.estacion, from, to, data.download_url, data.file);
-      else showErr(data.error || 'Error desconocido');
-    }
-  } catch(e) {
-    setDownloading(false);
-    showErr('Error de conexión: ' + e.message);
-  }
-}
-
-function pollJob(jobId, name, from, to) {
-  clearTimeout(pollTimer);
-  let elapsed = 0;
-  let lastLogCount = 0;
-
-  function appendLogs(logs) {
-    if (!logs || !logs.length) return;
-    const box = document.getElementById('liveLog');
-    if (!box) return;
-    const newLines = logs.slice(lastLogCount);
-    if (!newLines.length) return;
-    lastLogCount = logs.length;
-    box.style.display = 'block';
-    newLines.forEach(line => {
-      const d = document.createElement('div');
-      // Colorear según tipo
-      if (line.startsWith('+')) d.style.color = 'var(--success)';
-      else if (line.startsWith('-')) d.style.color = 'var(--warn)';
-      else if (line.startsWith('!') || line.startsWith('Error')) d.style.color = 'var(--error)';
-      else if (line.startsWith('>') || line.startsWith('?')) d.style.color = 'var(--accent-2)';
-      d.textContent = line;
-      box.appendChild(d);
-    });
-    box.scrollTop = box.scrollHeight;
-  }
-
-  function poll() {
-    fetch('/api/job_status/' + jobId)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) { pollTimer = setTimeout(poll, 2000); return; }
-        elapsed += 2;
-        if (elapsed < 8) animProg(1);
-        else if (elapsed < 30) animProg(2);
-        else animProg(3);
-
-        // Mostrar logs del servidor
-        appendLogs(data.logs);
-
-        if (data.status === 'done') {
-          clearInterval(pInterval);
-          document.getElementById('pBar').style.width = '100%';
-          setDownloading(false);
-          if (data.result?.saved && data.result?.download_url)
-            showOk(name, from, to, data.result.download_url, data.result.file);
-          else showErr((data.result?.error) || 'Sin datos disponibles');
-        } else if (data.status === 'failed') {
-          clearInterval(pInterval);
-          setDownloading(false);
-          showErr(data.error || 'Error en la descarga');
-        } else {
-          pollTimer = setTimeout(poll, 2000);
-        }
-      })
-      .catch(() => { pollTimer = setTimeout(poll, 3000); });
-  }
-  pollTimer = setTimeout(poll, 2000);
-}
-
-function animProg(stage) {
-  clearInterval(pInterval);
-  const targets = [0, 25, 60, 88];
-  pPct = targets[stage];
-  document.getElementById('pBar').style.width = pPct + '%';
-  const labels = [
-    '⏳ Verificando disponibilidad en portal SENAMHI…',
-    '⬇ Descargando mes a mes…',
-    '📊 Generando archivo Excel…'
-  ];
-  ['ps1','ps2','ps3'].forEach((id,i) => {
-    const el = document.getElementById(id);
-    el.style.opacity = i <= stage-1 ? '1' : '0.3';
-    el.textContent = i < stage-1 ? '✅ ' + labels[i].replace(/^[⏳⬇📊✅]\s*/,'') :
-                     i === stage-1 ? labels[i] : labels[i];
-  });
-  pInterval = setInterval(() => {
-    const max = [0,40,80,96][stage];
-    if (pPct < max) { pPct += 0.4; document.getElementById('pBar').style.width = pPct+'%'; }
-  }, 400);
-}
-
-function setDownloading(active, name) {
-  const btn = document.getElementById('btnDirect');
-  const prog = document.getElementById('progressArea');
-  if (active) {
-    btn.disabled = true;
-    btn.querySelector('span:first-child').textContent = '⏳ Descargando…';
-    prog.classList.add('show');
-    document.getElementById('pStn').textContent = name||'–';
-    pPct = 0;
-    document.getElementById('pBar').style.width = '0%';
-    // Limpiar log anterior
-    const log = document.getElementById('liveLog');
-    if (log) { log.innerHTML = ''; log.style.display = 'none'; }
-  } else {
-    btn.disabled = false;
-    btn.querySelector('span:first-child').textContent = '⬇ Descarga automática';
-    prog.classList.remove('show');
-  }
 }
 
 function showOk(name, from, to, url, file, rows) {
@@ -1053,28 +859,11 @@ function showOk(name, from, to, url, file, rows) {
 
 function showErr(msg) {
   const box = document.getElementById('resultBox');
-  const from = document.getElementById('fromDate').value || '';
-  const isOld = from && from < '2015-01-01';
-  const extra = isOld
-    ? `<div style="margin-top:10px;padding:8px 12px;background:rgba(245,158,11,0.1);
-        border:1px solid rgba(245,158,11,0.3);border-radius:6px;font-size:0.78rem;color:#fbbf24;">
-        ⚠ Estás pidiendo datos del año <strong>${from.slice(0,4)}</strong>.
-        El sistema automático solo tiene datos desde ~2015.<br>
-        Para datos históricos anteriores usa el
-        <a href="https://www.senamhi.gob.pe/site/descarga-datos/" target="_blank"
-          style="color:var(--accent-2);text-decoration:underline">Portal SENAMHI con tu cuenta →</a>
-      </div>`
-    : '';
   box.innerHTML = `<div class="r-err">
-    <div class="r-title">❌ No se pudo descargar</div>
+    <div class="r-title">❌ No se pudo convertir</div>
     <div class="r-desc">${esc(msg)}</div>
-    ${extra}
     <div style="margin-top:12px">
       <button class="btn-retry" onclick="resetResults()">↺ Intentar de nuevo</button>
-      <a class="btn-retry" href="https://www.senamhi.gob.pe/site/descarga-datos/"
-        target="_blank" rel="noopener" style="text-decoration:none;margin-left:6px">
-        🌐 Ir al portal manual →
-      </a>
     </div>
   </div>`;
   box.classList.add('show');
@@ -1082,8 +871,6 @@ function showErr(msg) {
 
 function resetResults() {
   clearTimeout(pollTimer);
-  clearInterval(pInterval);
-  setDownloading(false);
   document.getElementById('resultBox').classList.remove('show');
   document.getElementById('resultBox').innerHTML = '';
 }
