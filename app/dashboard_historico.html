@@ -267,15 +267,30 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 .bda-sub{font-size:0.72rem;color:var(--muted);}
 
 /* ── FILTER TABS ── */
-.ftab{background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--muted);font-size:0.8rem;font-weight:600;padding:6px 14px;cursor:pointer;
-  transition:var(--t);}
-.ftab.active{border-bottom-color:var(--accent-2);color:var(--accent-2);}
-.filter-chip{background:var(--glass);border:1px solid var(--border);border-radius:999px;
-  color:var(--text-2);font-size:0.75rem;padding:4px 12px;cursor:pointer;transition:var(--t);}
-.filter-chip:hover,.filter-chip.sel{background:rgba(47,107,70,0.2);color:var(--accent-2);
-  border-color:var(--accent-2);}
-.chip-list{display:flex;flex-wrap:wrap;gap:6px;max-height:120px;overflow-y:auto;padding:2px;}
+.tab-switcher{display:flex;border-radius:var(--r);background:rgba(0,0,0,0.3);
+  border:1px solid var(--border);padding:3px;gap:3px;margin-bottom:12px;}
+.tab-btn{flex:1;padding:7px 8px;border:0;background:transparent;color:var(--muted);
+  cursor:pointer;font-weight:600;font-size:0.78rem;border-radius:6px;
+  transition:var(--t);letter-spacing:0.01em;font-family:'Inter',sans-serif;}
+.tab-btn:hover:not(.active){color:var(--text-2);background:var(--glass-2);}
+.tab-btn.active{background:linear-gradient(135deg,#2f6b46 0%,#1e4a30 100%);
+  color:#e2f0e8;box-shadow:0 3px 10px rgba(47,107,70,0.35);}
+.dept-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;
+  max-height:220px;overflow-y:auto;padding:2px;}
+.dept-btn{background:var(--glass);border:1px solid var(--border);padding:7px 8px;
+  border-radius:var(--r);color:var(--text-2);cursor:pointer;font-weight:600;
+  display:flex;align-items:center;justify-content:flex-start;gap:7px;
+  font-size:0.78rem;width:100%;min-height:34px;transition:var(--t);
+  font-family:'Inter',sans-serif;}
+.dept-btn:hover:not(.selected){background:var(--glass-2);border-color:var(--border-2);color:var(--text);}
+.dept-btn .dept-icon{font-size:0.85rem;line-height:1;display:inline-flex;
+  width:18px;justify-content:center;flex-shrink:0;}
+.dept-btn .dept-label{flex:1;text-align:left;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;font-size:0.75rem;}
+.dept-btn.selected{background:linear-gradient(135deg,rgba(95,207,141,0.18),rgba(47,107,70,0.12));
+  border-color:rgba(95,207,141,0.4);color:#5fcf8d;
+  box-shadow:0 4px 14px rgba(95,207,141,0.15);}
+.sel-panel{display:none;}.sel-panel.active{display:block;}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;}
@@ -319,22 +334,22 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 
   <!-- FILTROS -->
   <div class="card">
-    <div class="card-title">🗂 Filtrar por área</div>
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:14px;">
-      <button class="ftab active" id="ftab-dept"   onclick="switchFilter('dept')">Departamento</button>
-      <button class="ftab"        id="ftab-cuenca" onclick="switchFilter('cuenca')">Cuenca</button>
-      <button class="ftab"        id="ftab-sector" onclick="switchFilter('sector')">Sector</button>
+    <div class="card-title">🗂 Área de análisis</div>
+    <div class="tab-switcher">
+      <button class="tab-btn active" onclick="switchFilter('dept', this)">Departamento</button>
+      <button class="tab-btn"        onclick="switchFilter('cuenca', this)">Cuenca</button>
+      <button class="tab-btn"        onclick="switchFilter('sector', this)">Sector</button>
     </div>
-    <div id="fpanel-dept">
-      <div class="chip-list" id="deptChips"></div>
+    <div class="sel-panel active" id="fpanel-dept">
+      <div class="dept-grid" id="deptChips"></div>
     </div>
-    <div id="fpanel-cuenca" style="display:none">
+    <div class="sel-panel" id="fpanel-cuenca">
       <div style="font-size:0.76rem;color:var(--muted);margin-bottom:8px;" id="cuencaStatus">Cargando cuencas…</div>
-      <div class="chip-list" id="cuencaChips"></div>
+      <div class="dept-grid" id="cuencaChips"></div>
     </div>
-    <div id="fpanel-sector" style="display:none">
+    <div class="sel-panel" id="fpanel-sector">
       <div style="font-size:0.76rem;color:var(--muted);margin-bottom:8px;" id="sectorStatus">Cargando sectores…</div>
-      <div class="chip-list" id="sectorChips"></div>
+      <div class="dept-grid" id="sectorChips"></div>
     </div>
   </div>
 
@@ -474,10 +489,11 @@ async function loadStations() {
 let activeFilter = { type: null, value: null };
 let geoData = { cuenca: null, sector: null };
 
-function switchFilter(type) {
+function switchFilter(type, btnEl) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
   ['dept','cuenca','sector'].forEach(t => {
-    document.getElementById(`ftab-${t}`).classList.toggle('active', t === type);
-    document.getElementById(`fpanel-${t}`).style.display = t === type ? 'block' : 'none';
+    document.getElementById(`fpanel-${t}`).classList.toggle('active', t === type);
   });
   if (type === 'cuenca' && !geoData.cuenca) loadGeoFilter('cuenca');
   if (type === 'sector' && !geoData.sector) loadGeoFilter('sector');
@@ -485,21 +501,26 @@ function switchFilter(type) {
 
 function buildDeptChips() {
   const depts = [...new Set(allStations.map(s => s.departamento).filter(Boolean))].sort();
-  document.getElementById('deptChips').innerHTML = depts.map(d =>
-    `<button class="filter-chip" id="chip-dept-${d.replace(/\s/g,'_')}"
-      onclick="selectFilter('dept','${d.replace(/'/g,"\\'")}')">${d}</button>`
-  ).join('');
+  const grid = document.getElementById('deptChips');
+  grid.innerHTML = '';
+  depts.forEach(d => {
+    const btn = document.createElement('button');
+    btn.className = 'dept-btn';
+    btn.title = d;
+    btn.innerHTML = `<span class="dept-icon">🗺️</span><span class="dept-label">${d}</span>`;
+    btn.onclick = () => selectFilter('dept', d, btn);
+    grid.appendChild(btn);
+  });
 }
 
 async function loadGeoFilter(layer) {
   const statusEl = document.getElementById(`${layer}Status`);
-  const chipsEl  = document.getElementById(`${layer}Chips`);
+  const gridEl   = document.getElementById(`${layer}Chips`);
   try {
     const apiLayer = layer === 'sector' ? 'sectores' : 'cuencas';
     const r = await fetch(`/api/geojson?layer=${apiLayer}`);
     const geo = await r.json();
     geoData[layer] = geo;
-    // Extraer nombres únicos de las propiedades del shapefile
     const names = [...new Set(
       geo.features.map(f => {
         const p = f.properties || {};
@@ -507,31 +528,30 @@ async function loadGeoFilter(layer) {
       }).filter(Boolean)
     )].sort();
     statusEl.style.display = 'none';
-    chipsEl.innerHTML = names.map((n, i) =>
-      `<button class="filter-chip" id="chip-${layer}-${i}"
-        onclick="selectFilter('${layer}','${n.replace(/'/g,"\\'")}')">${n}</button>`
-    ).join('');
+    gridEl.innerHTML = '';
+    const icon = layer === 'cuenca' ? '🌊' : '🧭';
+    names.forEach(n => {
+      const btn = document.createElement('button');
+      btn.className = 'dept-btn';
+      btn.title = n;
+      btn.innerHTML = `<span class="dept-icon">${icon}</span><span class="dept-label">${n}</span>`;
+      btn.onclick = () => selectFilter(layer, n, btn);
+      gridEl.appendChild(btn);
+    });
   } catch(e) {
     statusEl.textContent = 'No disponible';
   }
 }
 
-function selectFilter(type, value) {
+function selectFilter(type, value, btnEl) {
   // Toggle: clic en activo lo limpia
   if (activeFilter.type === type && activeFilter.value === value) {
     activeFilter = { type: null, value: null };
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('sel'));
+    document.querySelectorAll('.dept-btn').forEach(b => b.classList.remove('selected'));
   } else {
     activeFilter = { type, value };
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('sel'));
-    // Activar el chip correspondiente
-    const safe = value.replace(/\s/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    const chipById = document.querySelector(`.filter-chip[onclick*="${value.replace(/'/g,"\\'")}"]:not(.sel)`);
-    if (chipById) chipById.classList.add('sel');
-    // fallback: buscar por texto
-    document.querySelectorAll('.filter-chip').forEach(c => {
-      if (c.textContent === value) c.classList.add('sel');
-    });
+    document.querySelectorAll('.dept-btn').forEach(b => b.classList.remove('selected'));
+    if (btnEl) btnEl.classList.add('selected');
   }
   applyFilter();
 }
