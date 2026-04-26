@@ -222,6 +222,65 @@ def api_hist_local_index():
     return jsonify({'ok': True, 'count': len(codes), 'codes': codes})
 
 
+@app.route('/api/local_hist_download')
+def api_local_hist_download():
+    """
+    Busca el archivo qcNNNNNNNN.txt en DATA/HISTORICA/, lo parsea y devuelve un Excel.
+    Parámetros GET: cod_qc (ej: 'qc00000708'), name (nombre de estación)
+    """
+    cod_qc = (request.args.get('cod_qc') or '').strip()
+    station_name = (request.args.get('name') or cod_qc).strip()
+    if not cod_qc:
+        return jsonify({'error': 'Parámetro cod_qc requerido'}), 400
+
+    base = _find_data_dir()
+    hist_dir = base / 'HISTORICA'
+
+    # Buscar el archivo en cualquier subcarpeta de departamento
+    target = None
+    if hist_dir.exists():
+        for dept_dir in sorted(hist_dir.iterdir()):
+            if dept_dir.is_dir():
+                candidate = dept_dir / f'{cod_qc}.txt'
+                if candidate.exists():
+                    target = candidate
+                    break
+
+    if target is None:
+        return jsonify({'error': f'Archivo {cod_qc}.txt no encontrado en DATA/HISTORICA/'}), 404
+
+    # Parsear con parse_hist_txt del scraper
+    mod = scraper or _load_scraper_module()
+    if not (mod and hasattr(mod, 'parse_hist_txt')):
+        return jsonify({'error': 'Módulo scraper no disponible'}), 500
+
+    try:
+        content = target.read_text(encoding='utf-8', errors='replace')
+        df = mod.parse_hist_txt(content)
+    except Exception as e:
+        return jsonify({'error': f'Error parseando archivo: {str(e)}'}), 500
+
+    if df is None or df.empty:
+        return jsonify({'error': 'El archivo no contiene datos válidos'}), 400
+
+    # Guardar Excel en DATA/outputs/ y devolver URL de descarga
+    output_dir = base / 'outputs'
+    output_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r'[^\w]', '_', station_name)
+    xl_name = f'hist_{safe_name}_{cod_qc}.xlsx'
+    xl_path = output_dir / xl_name
+
+    cols = [c for c in ['fecha', 'anio', 'mes', 'dia', 'precip_mm', 'tmax_c', 'tmin_c'] if c in df.columns]
+    df[cols].to_excel(xl_path, index=False)
+
+    return jsonify({
+        'ok': True,
+        'rows': len(df),
+        'file': xl_name,
+        'download_url': f'/api/download_output?file={xl_name}'
+    })
+
+
 @app.route('/api/debug_scraper')
 def api_debug_scraper():
     """Diagnóstico: simula exactamente lo que api_save_by_name hace para encontrar una estación."""
