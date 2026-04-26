@@ -307,6 +307,11 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
 .stn-tooltip::before{display:none!important;}
 .leaflet-control-zoom a{background:rgba(6,20,12,0.9)!important;color:var(--accent-2)!important;
   border-color:var(--border-2)!important;}
+.stn-popup .leaflet-popup-content-wrapper{background:rgba(6,15,10,0.96)!important;
+  border:1px solid rgba(95,207,141,0.25)!important;color:var(--text)!important;
+  border-radius:10px!important;box-shadow:0 8px 24px rgba(0,0,0,0.6)!important;}
+.stn-popup .leaflet-popup-tip{background:rgba(6,15,10,0.96)!important;}
+.stn-popup .leaflet-popup-close-button{color:var(--text-2)!important;}
 </style>
 </head>
 <body>
@@ -683,6 +688,17 @@ function renderMapMarkers() {
       color:     hasLocal ? '#22c55e' : '#1e4f30',
       weight: 1, opacity: 0.9, fillOpacity: 0.8
     }).addTo(map);
+    const altLabel = s.altitud != null ? `<br><span style="color:#aaa">Altitud: ${Number(s.altitud).toLocaleString()} m.s.n.m.</span>` : '';
+    const popupHtml = `
+      <div style="min-width:180px;font-family:'Inter',sans-serif">
+        <div style="font-weight:700;font-size:0.9rem;color:#5fcf8d;margin-bottom:3px">${s.estacion}</div>
+        <div style="font-size:0.78rem;color:#aaa;margin-bottom:6px">${s.departamento || ''} · Cód: ${s.cod || '—'}</div>
+        <div style="font-size:0.78rem;line-height:1.6">
+          <span style="color:#aaa">Variables:</span> <strong>Precip · Tmax · Tmin</strong>${altLabel}
+        </div>
+        ${hasLocal ? '<div style="margin-top:6px;font-size:0.72rem;color:#22c55e">💾 Datos descargados localmente</div>' : ''}
+      </div>`;
+    m.bindPopup(popupHtml, { maxWidth: 260, className: 'stn-popup' });
     m.bindTooltip(s.estacion, {
       permanent: false, direction: 'top', className: 'stn-tooltip'
     });

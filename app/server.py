@@ -490,7 +490,8 @@ def api_stations():
                 'cod': row.get(cod_col) if cod_col else None,
                 'provincia': row.get(prov_col) if prov_col else None,
                 'distrito': row.get(dist_col) if dist_col else None,
-                'altitud': row.get(alt_col) if alt_col else None
+                'altitud': row.get(alt_col) if alt_col else None,
+                'tipo_sensor': (str(row.get(auto_col) or '').strip() or str(row.get(conv_col) or '').strip()) or None,
             })
         except Exception:
             continue

@@ -372,7 +372,8 @@ fetch('/api/stations')
         const icoVal = s.ico || s.ICO || null;
         const rawAlt = s.altitud ?? s.ALTITUD ?? s.Altitud ?? s.alt ?? s.ALT ?? null;
         const altVal = (rawAlt !== null && rawAlt !== undefined && rawAlt !== '') ? Number(rawAlt) : null;
-        return { name, tipo, estadoOp, dept, cuenca, prec, temp, act, lat, lon, cod: codVal, ico: icoVal, altitud: Number.isFinite(altVal) ? altVal : null, raw: {rawLat, rawLon} };
+        const tipoSensor = s.tipo_sensor || s.TIPO_SENSOR || null;
+        return { name, tipo, estadoOp, dept, cuenca, prec, temp, act, lat, lon, cod: codVal, ico: icoVal, altitud: Number.isFinite(altVal) ? altVal : null, tipoSensor, raw: {rawLat, rawLon} };
       });
       console.log('STATIONS_POOL sample', STATIONS_POOL.slice(0,3));
     } else {
@@ -1388,8 +1389,35 @@ function plotStationsOnMap(stations) {
     const opts = { radius: STATION_RADIUS, color: '#111827', weight:0.8, fillColor: color, fillOpacity:0.95 }; 
     try { opts.pane = 'stationsPane'; } catch(e){}
     const marker = L.circleMarker([s.lat, s.lon], opts);
-    const altStr = s.altitud != null ? `<br>Alt: <strong>${s.altitud.toLocaleString()} m</strong>` : '';
-    const popup = `<div style="font-weight:600;color:${color}">${s.name}</div><div style="font-size:0.85rem;color:#99b7d1">${s.dept || ''} · ${s.cuenca || ''}</div><div style="margin-top:6px">Prec: <strong>${s.prec} mm</strong><br>Temp: <strong>${s.temp} °C</strong>${altStr}</div>`;
+    // Decodificar tipo de sensor a descripción legible
+    const SENSOR_LABELS = {
+      'PLU':'Pluviométrica','HLM':'Hidrométrica','CO':'Climatológica Ordinaria',
+      'CP':'Climatológica Principal','HLG':'Hidrológica','MAP':'Meteorológica Auto.',
+      'PE':'Pluviométrica Especial','EHA':'Hidrológica Auto.','EMA':'Meteorológica Auto.',
+      'EAMA':'Agrometeorológica Auto.','EHMA':'Hidrometeorológica Auto.','EAA':'Agroclimática Auto.'
+    };
+    const SENSOR_VARS = {
+      'PLU':'Precipitación','HLM':'Nivel / Caudal','CO':'Precip · Temp · Humedad · Viento',
+      'CP':'Precip · Temp · Humedad · Viento · Evap','HLG':'Nivel / Caudal',
+      'MAP':'Precipitación','PE':'Precipitación','EHA':'Nivel / Caudal auto.',
+      'EMA':'Temp · Humedad · Viento · Rad. Solar','EAMA':'Agrometeorología completa',
+      'EHMA':'Hidro + Meteo automático','EAA':'Agroclimatología'
+    };
+    const sensorCode = (s.tipoSensor || '').toUpperCase();
+    const sensorLabel = SENSOR_LABELS[sensorCode] || (s.tipoSensor ? s.tipoSensor : (s.tipo || ''));
+    const sensorVars  = SENSOR_VARS[sensorCode]  || '—';
+    const altStr = s.altitud != null ? `<tr><td style="color:#99b7d1">Altitud</td><td><strong>${s.altitud.toLocaleString()} m.s.n.m.</strong></td></tr>` : '';
+    const popup = `
+      <div style="min-width:200px">
+        <div style="font-weight:700;font-size:0.95rem;color:${color};margin-bottom:4px">${s.name}</div>
+        <div style="font-size:0.8rem;color:#99b7d1;margin-bottom:8px">${s.dept || ''}${s.cuenca ? ' · ' + s.cuenca : ''}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Tipo</td><td><strong>${sensorLabel}</strong></td></tr>
+          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Variables</td><td>${sensorVars}</td></tr>
+          ${altStr}
+          <tr><td style="color:#99b7d1;padding:2px 6px 2px 0">Estado</td><td><strong>${s.estadoOp || '—'}</strong></td></tr>
+        </table>
+      </div>`;
     marker.bindPopup(popup);
     marker.on('click', () => {
       document.getElementById('bc-area').textContent = s.dept || 'ÁREA';
