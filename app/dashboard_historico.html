@@ -622,8 +622,12 @@ function initMap() {
   map = L.map('stnMap', {
     center: [-9.5, -75.0],
     zoom: 5,
+    minZoom: 4,
+    maxZoom: 18,
     zoomControl: true,
-    attributionControl: false
+    attributionControl: false,
+    maxBounds: [[-20.0, -85.0], [1.0, -68.0]],
+    maxBoundsViscosity: 0.85
   });
   // Tiles satelitales ESRI
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
