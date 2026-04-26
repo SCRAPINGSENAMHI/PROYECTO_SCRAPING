@@ -728,7 +728,7 @@ function doSearch() {
       <span style="font-size:1rem">🌦</span>
       <div>
         <div class="dd-name">${esc(s.estacion)}${localBadge}</div>
-        <div class="dd-meta">${esc(s.cod||'–')} · ${esc(s.departamento||'')} · ${s.lat?.toFixed(3)}, ${s.lon?.toFixed(3)}</div>
+        <div class="dd-meta">${esc(s.cod||'–')} · ${esc(s.departamento||'')} · ${s.lat?.toFixed(3)}, ${s.lon?.toFixed(3)}${s.altitud != null ? ' · ' + Number(s.altitud).toLocaleString() + ' m' : ''}</div>
       </div>
     </div>`;
   }).join(''));
