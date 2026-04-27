@@ -1094,7 +1094,8 @@ let _dlSeenLogs = 0;       // cuántos logs ya mostramos (evita duplicados)
 let _dlEstimatedMonths = 0; // estimación de meses a descargar para la barra
 let _dlCalGrid = null;      // div del grid del calendario
 let _dlCalStats = null;     // span de estadísticas
-let _dlCalData = {};        // {YYYYMM: true/false} datos por mes
+let _dlCalData = {};        // {YYYYMM: número de registros, -1 = sin datos}
+let _dlDetectedFreq = 1;   // registros esperados por día (1=diario, 24=horario, etc.)
 
 function _initDlPanel() {
   _dlPanel        = document.getElementById('dlProgressPanel');
@@ -1111,6 +1112,7 @@ function _showDlPanel(stationName, fromDate, toDate) {
   if (!_dlPanel) _initDlPanel();
   _dlSeenLogs = 0;
   _dlCalData = {};
+  _dlDetectedFreq = 1;
   // Estimar meses entre fechas para la barra de progreso
   try {
     const d1 = new Date(fromDate), d2 = new Date(toDate);
@@ -1132,14 +1134,32 @@ function _daysInMonth(year, month) {
   return new Date(parseInt(year), parseInt(month), 0).getDate();
 }
 
+// Detecta automáticamente la frecuencia de los datos (diario=1, horario=24, etc.)
+// usando los meses con más registros para evitar que meses incompletos confundan.
+function _detectFrequency() {
+  const FREQS = [1, 2, 4, 8, 24, 48, 144, 288]; // frecuencias estándar (reg/día)
+  const samples = [];
+  for (const ym in _dlCalData) {
+    const count = _dlCalData[ym];
+    if (count <= 0) continue;
+    const yr = ym.slice(0,4), mo = parseInt(ym.slice(4,6), 10);
+    samples.push(count / _daysInMonth(yr, mo));
+  }
+  if (samples.length < 2) return; // esperamos al menos 2 meses
+  // Usar el percentil 75 para ignorar meses incompletos (que darían perDay bajo)
+  const sorted = samples.slice().sort((a,b) => a-b);
+  const p75 = sorted[Math.floor(sorted.length * 0.75)];
+  _dlDetectedFreq = FREQS.reduce((a,b) => Math.abs(b-p75) < Math.abs(a-p75) ? b : a);
+}
+
 function _cellColor(yr, m, count) {
-  // count: -1 = sin datos, 0+ = número de registros
   if (count < 0) return { bg: '#374151', shadow: '', title: 'Sin datos' };
-  const expected = _daysInMonth(yr, m);
+  const expected = _daysInMonth(yr, m) * _dlDetectedFreq;
   const pct = count / expected;
-  if (pct >= 0.9)  return { bg: '#38bdf8', shadow: '0 0 4px rgba(56,189,248,0.5)', title: count + ' reg. (completo)' };
-  if (pct >= 0.5)  return { bg: '#22c55e', shadow: '0 0 4px rgba(34,197,94,0.4)',  title: count + ' reg. (>50%)' };
-  return             { bg: '#f97316', shadow: '0 0 4px rgba(249,115,22,0.4)',  title: count + ' reg. (pocos)' };
+  const freqLabel = _dlDetectedFreq > 1 ? ' (' + _dlDetectedFreq + 'reg/día)' : '';
+  if (pct >= 0.9) return { bg: '#38bdf8', shadow: '0 0 4px rgba(56,189,248,0.5)', title: count + ' reg. — completo' + freqLabel };
+  if (pct >= 0.5) return { bg: '#22c55e', shadow: '0 0 4px rgba(34,197,94,0.4)',  title: count + ' reg. — >50%' + freqLabel };
+  return                 { bg: '#f97316', shadow: '0 0 4px rgba(249,115,22,0.4)',  title: count + ' reg. — pocos' + freqLabel };
 }
 
 function _renderCalendar() {
@@ -1202,9 +1222,18 @@ function _updateDlPanelLogs(logs) {
     if (trimmed.startsWith('+ ')) {
       // Extraer YYYYMM y número de registros: "+ 202401: 30 registros"
       const m = trimmed.match(/^\+\s*(\d{6})[^:]*:\s*(\d+)/);
-      const count = m ? parseInt(m[2], 10) : 1;
-      div.style.color = count >= 14 ? '#38bdf8' : '#f97316'; // celeste si ≥14 reg, naranja si pocos
-      if (m) { _dlCalData[m[1]] = count; calendarUpdated = true; }
+      if (m) {
+        const ym = m[1], count = parseInt(m[2], 10);
+        _dlCalData[ym] = count;
+        calendarUpdated = true;
+        // Color del log según completitud (se recalcula con frecuencia detectada al renderizar)
+        const days = _daysInMonth(ym.slice(0,4), parseInt(ym.slice(4,6),10));
+        const expTmp = days * (_dlDetectedFreq || 1);
+        const pctTmp = count / expTmp;
+        div.style.color = pctTmp >= 0.9 ? '#38bdf8' : pctTmp >= 0.5 ? '#22c55e' : '#f97316';
+      } else {
+        div.style.color = '#38bdf8';
+      }
     } else if (trimmed.startsWith('- ') || trimmed.includes('sin datos')) {
       div.style.color = '#4a5568'; // gris: sin datos ese mes
       const m = trimmed.match(/^-\s*(\d{6})/);
@@ -1222,7 +1251,7 @@ function _updateDlPanelLogs(logs) {
   // Auto-scroll al fondo del log
   _dlPanelLog.scrollTop = _dlPanelLog.scrollHeight;
   // Actualizar calendario si hubo cambios
-  if (calendarUpdated) _renderCalendar();
+  if (calendarUpdated) { _detectFrequency(); _renderCalendar(); }
   // Actualizar barra de progreso basada en meses procesados
   const mesesProcesados = Object.keys(_dlCalData).length;
   const pct = Math.min(95, 5 + Math.round((mesesProcesados / _dlEstimatedMonths) * 90));
