@@ -298,9 +298,11 @@ function doLogin(){
       <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:#5fcf8d;font-weight:700">Calendario de datos</span>
       <div style="display:flex;align-items:center;gap:8px">
         <span id="dlCalStats" style="font-size:0.68rem;color:#6b8aaa"></span>
-        <span style="display:flex;align-items:center;gap:3px;font-size:0.62rem;color:#5a8f70">
-          <span style="width:8px;height:8px;background:#3b82f6;border-radius:2px;display:inline-block"></span>Con datos
-          <span style="width:8px;height:8px;background:#1f2d25;border-radius:2px;border:1px solid rgba(255,255,255,0.08);display:inline-block;margin-left:4px"></span>Sin datos
+        <span style="display:flex;align-items:center;gap:4px;font-size:0.6rem;color:#5a8f70;flex-wrap:wrap;justify-content:flex-end">
+          <span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;background:#38bdf8;border-radius:2px;display:inline-block"></span>Completo</span>
+          <span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;background:#22c55e;border-radius:2px;display:inline-block"></span>&gt;50%</span>
+          <span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;background:#f97316;border-radius:2px;display:inline-block"></span>Pocos</span>
+          <span style="display:flex;align-items:center;gap:2px"><span style="width:8px;height:8px;background:#374151;border-radius:2px;display:inline-block"></span>Sin datos</span>
         </span>
       </div>
     </div>
@@ -1126,9 +1128,23 @@ function _showDlPanel(stationName, fromDate, toDate) {
   _dlPanel.style.display = 'block';
 }
 
+function _daysInMonth(year, month) {
+  return new Date(parseInt(year), parseInt(month), 0).getDate();
+}
+
+function _cellColor(yr, m, count) {
+  // count: -1 = sin datos, 0+ = número de registros
+  if (count < 0) return { bg: '#374151', shadow: '', title: 'Sin datos' };
+  const expected = _daysInMonth(yr, m);
+  const pct = count / expected;
+  if (pct >= 0.9)  return { bg: '#38bdf8', shadow: '0 0 4px rgba(56,189,248,0.5)', title: count + ' reg. (completo)' };
+  if (pct >= 0.5)  return { bg: '#22c55e', shadow: '0 0 4px rgba(34,197,94,0.4)',  title: count + ' reg. (>50%)' };
+  return             { bg: '#f97316', shadow: '0 0 4px rgba(249,115,22,0.4)',  title: count + ' reg. (pocos)' };
+}
+
 function _renderCalendar() {
   if (!_dlCalGrid) return;
-  // Agrupar por año
+  // Agrupar por año: valor = número de registros (-1 = sin datos, null = no procesado)
   const years = {};
   for (const ym in _dlCalData) {
     const yr = ym.slice(0,4);
@@ -1140,24 +1156,20 @@ function _renderCalendar() {
   sortedYears.forEach(yr => {
     const row = document.createElement('div');
     row.style.cssText = 'display:grid;grid-template-columns:30px repeat(12,1fr);gap:2px;align-items:center';
-    // Etiqueta año
     const lbl = document.createElement('div');
     lbl.style.cssText = 'font-size:0.6rem;color:#5a8f70;font-weight:600;text-align:right;padding-right:4px';
     lbl.textContent = yr;
     row.appendChild(lbl);
-    // 12 celdas mes
     for (let m = 1; m <= 12; m++) {
       const cell = document.createElement('div');
-      const hasData = years[yr][m];
-      if (hasData === undefined) {
+      const val = years[yr][m];
+      if (val === undefined || val === null) {
         // No procesado aún
         cell.style.cssText = 'height:11px;border-radius:2px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.04)';
-      } else if (hasData) {
-        cell.style.cssText = 'height:11px;border-radius:2px;background:#3b82f6;box-shadow:0 0 4px rgba(59,130,246,0.4)';
-        cell.title = yr + '-' + String(m).padStart(2,'0') + ': con datos';
       } else {
-        cell.style.cssText = 'height:11px;border-radius:2px;background:#1a2820;border:1px solid rgba(255,255,255,0.06)';
-        cell.title = yr + '-' + String(m).padStart(2,'0') + ': sin datos';
+        const c = _cellColor(yr, m, val);
+        cell.style.cssText = 'height:11px;border-radius:2px;background:' + c.bg + (c.shadow ? ';box-shadow:' + c.shadow : '');
+        cell.title = yr + '-' + String(m).padStart(2,'0') + ': ' + c.title;
       }
       row.appendChild(cell);
     }
@@ -1165,8 +1177,9 @@ function _renderCalendar() {
   });
   // Stats
   if (_dlCalStats) {
-    const total = Object.keys(_dlCalData).length;
-    const withData = Object.values(_dlCalData).filter(v => v).length;
+    const vals = Object.values(_dlCalData);
+    const total = vals.length;
+    const withData = vals.filter(v => v >= 0).length;
     if (total > 0) {
       const pct = Math.round(withData / total * 100);
       _dlCalStats.textContent = withData + '/' + total + ' meses (' + pct + '%)';
@@ -1187,14 +1200,15 @@ function _updateDlPanelLogs(logs) {
     const trimmed = line.trimStart();
     // Colorear según tipo de línea
     if (trimmed.startsWith('+ ')) {
-      div.style.color = '#3b82f6'; // azul: datos encontrados
-      // Extraer YYYYMM del log: "+ 202401: 30 registros"
-      const m = trimmed.match(/^\+\s*(\d{6})/);
-      if (m) { _dlCalData[m[1]] = true; calendarUpdated = true; }
+      // Extraer YYYYMM y número de registros: "+ 202401: 30 registros"
+      const m = trimmed.match(/^\+\s*(\d{6})[^:]*:\s*(\d+)/);
+      const count = m ? parseInt(m[2], 10) : 1;
+      div.style.color = count >= 14 ? '#38bdf8' : '#f97316'; // celeste si ≥14 reg, naranja si pocos
+      if (m) { _dlCalData[m[1]] = count; calendarUpdated = true; }
     } else if (trimmed.startsWith('- ') || trimmed.includes('sin datos')) {
-      div.style.color = '#3d5247'; // gris oscuro: sin datos ese mes
+      div.style.color = '#4a5568'; // gris: sin datos ese mes
       const m = trimmed.match(/^-\s*(\d{6})/);
-      if (m) { _dlCalData[m[1]] = false; calendarUpdated = true; }
+      if (m) { _dlCalData[m[1]] = -1; calendarUpdated = true; }
     } else if (trimmed.startsWith('! ') || trimmed.toLowerCase().includes('error')) {
       div.style.color = '#f59e0b'; // amarillo: advertencia
     } else if (trimmed.startsWith('> ')) {
@@ -1210,7 +1224,7 @@ function _updateDlPanelLogs(logs) {
   // Actualizar calendario si hubo cambios
   if (calendarUpdated) _renderCalendar();
   // Actualizar barra de progreso basada en meses procesados
-  const mesesProcesados = logs.filter(l => { const t = l.trimStart(); return t.startsWith('+ ') || t.startsWith('- '); }).length;
+  const mesesProcesados = Object.keys(_dlCalData).length;
   const pct = Math.min(95, 5 + Math.round((mesesProcesados / _dlEstimatedMonths) * 90));
   _dlPanelBar.style.width = pct + '%';
 }
