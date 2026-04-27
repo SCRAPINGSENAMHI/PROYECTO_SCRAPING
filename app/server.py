@@ -1812,10 +1812,10 @@ def api_preview_variables():
     if not candidates:
         return jsonify({'ok': False, 'error': 'No se pudieron determinar parámetros del portal'}), 400
 
-    # Meses a probar: desde to_date hacia atrás, máx 18 meses
+    # Solo probar los 3 meses más recientes del rango — basta 1 hit para ver columnas
     try:
         months = _pd.date_range(from_date, to_date, freq='MS').strftime('%Y%m').tolist()
-        months = list(reversed(months))[:18]
+        months = list(reversed(months))[:3]
     except Exception:
         months = []
     if not months:
@@ -1824,7 +1824,7 @@ def api_preview_variables():
     session = scraper._build_senamhi_session()
     base_url = 'https://www.senamhi.gob.pe/mapas/mapa-estaciones-2/export.php'
 
-    for cand in candidates[:4]:
+    for cand in candidates[:2]:   # máx 2 candidatos
         for ym in months:
             params = {'estaciones': cand['cod'], 'CBOFiltro': ym,
                       't_e': cand['ico'], 'estado': cand['estado_portal']}
