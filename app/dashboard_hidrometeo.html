@@ -1270,18 +1270,10 @@ function initLeaflet() {
     maxBoundsViscosity: 1.0   // impide arrastrar fuera de Perú
   }).setView([-9.3, -75.0], 5);
 
-  // OpenStreetMap como capa por defecto (base)
-  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(leafletMap);
-
-  // ESRI WorldImagery (satélite) como alternativa
+  // ESRI WorldImagery (satélite) como capa por defecto
   const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-  });
-
-  const baseMaps = { 'OSM': osm, 'Satellite (Esri)': esri };
-  L.control.layers(baseMaps).addTo(leafletMap);
+  }).addTo(leafletMap);
 
   // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
   try {
@@ -1565,9 +1557,11 @@ function fetchAndShowLayer(layer, name) {
         return [Math.min(bb[0],fb[0]), Math.min(bb[1],fb[1]), Math.max(bb[2],fb[2]), Math.max(bb[3],fb[3])];
       }, [Infinity, Infinity, -Infinity, -Infinity]);
 
-      // Paso 1 rápido: pre-filtrar por bbox
+      // Paso 1 rápido: pre-filtrar por bbox (si el bbox resultó inválido, usar todas las estaciones)
+      const bboxValido = areaBbox[0] !== Infinity && areaBbox[2] !== -Infinity;
       const candidatosStn = STATIONS_POOL.filter(s => {
         if (s.lat == null || s.lon == null) return false;
+        if (!bboxValido) return true; // bbox inválido → no filtrar, pasar todo al PIP
         return _pointInBbox(Number(s.lon), Number(s.lat), areaBbox);
       });
 
@@ -1586,8 +1580,28 @@ function fetchAndShowLayer(layer, name) {
           } catch(e) { return false; }
         });
         if (myVersion !== _layerVersion) return;
-        CURRENT_VISIBLE_STATIONS = inside;
-        plotStationsOnMap(inside);
+
+        // Fallback: si turf devuelve 0 estaciones (problema de winding-order, bbox incorrecto,
+        // o topología compleja del GeoJSON), usar filtro por atributo dept/cuenca
+        let resultado = inside;
+        if (inside.length === 0) {
+          console.warn('fetchAndShowLayer: turf=0, usando fallback por atributo para "' + name + '"');
+          const tgtNorm = normStr(name);
+          if (layer === 'departamentos') {
+            resultado = STATIONS_POOL.filter(s => normStr(s.dept || '') === tgtNorm);
+          } else if (layer === 'cuencas') {
+            resultado = STATIONS_POOL.filter(s => normStr(s.cuenca || '') === tgtNorm ||
+                                                   normStr(s.cuenca || '').includes(tgtNorm) ||
+                                                   tgtNorm.includes(normStr(s.cuenca || '')));
+          } else {
+            // Para otras capas: mostrar candidatos del bbox si hay menos de 200
+            resultado = candidatosStn.length <= 200 ? candidatosStn : inside;
+          }
+          console.warn('fetchAndShowLayer: fallback resultado:', resultado.length, 'estaciones');
+        }
+
+        CURRENT_VISIBLE_STATIONS = resultado;
+        plotStationsOnMap(resultado);
         try { _renderTableOnly(); } catch(e){}
       }, 0);
     } else {
