@@ -950,7 +950,7 @@ function _buildTableRows(list) {
       <td style="color:var(--muted)">${s.cuenca || ''}</td>
       <td style="color:var(--muted);white-space:nowrap">${s.altitud != null ? s.altitud.toLocaleString() + ' m' : '—'}</td>
       <td>${estadoBadge}</td>
-      <td style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${viewBtn}${savedHtml ? savedHtml : ''}<input class="dl-from" type="date" value="2010-01-01" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha inicio"><input class="dl-to" type="date" value="${new Date().toISOString().slice(0,10)}" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha fin"><button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar</button><span class="dl-status" style="margin-left:4px"></span></td>
+      <td style="display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap">${viewBtn}${savedHtml ? savedHtml : ''}<input class="dl-from" type="date" value="2010-01-01" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha inicio"><input class="dl-to" type="date" value="${new Date().toISOString().slice(0,10)}" style="font-size:0.7rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);width:110px" title="Fecha fin"><button class="preview-vars-btn" data-cod="${s.cod||''}" data-name="${escaped}" onclick="previewVariables(this)" title="Ver qué variables tiene esta estación" style="font-size:0.72rem;padding:4px 8px;border-radius:6px;border:1px solid rgba(99,179,237,0.35);background:rgba(99,179,237,0.08);color:#63b3ed;cursor:pointer;white-space:nowrap">🔍 Variables</button><button class="download-btn" data-cod="${s.cod||''}" data-tipo="${s.tipo||''}" data-estado="${s.estadoOp||''}" data-ico="${s.ico||''}" onclick="downloadStation('${escaped}', this)">Descargar</button><span class="dl-status" style="margin-left:4px"></span></td>
     </tr>`;
   }).join('');
 }
@@ -2138,6 +2138,117 @@ async function mostrarRepresentatividad(cod_qc, nombre) {
       `<div class="repr-error">Error al cargar: ${e.message}</div>`;
   }
 }
+</script>
+
+<!-- ── MODAL VER VARIABLES ── -->
+<div id="previewVarsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);align-items:center;justify-content:center;z-index:9999;font-family:'Inter',sans-serif">
+  <div style="background:#0d1b14;border:1px solid rgba(95,207,141,0.25);border-radius:16px;padding:0;max-width:520px;width:92%;box-shadow:0 16px 60px rgba(0,0,0,0.7);overflow:hidden">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid rgba(255,255,255,0.07)">
+      <div>
+        <div style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.08em;color:#5fcf8d;font-weight:700">Variables disponibles</div>
+        <div id="pvModalStation" style="font-size:1rem;font-weight:700;color:#e2f0e8;margin-top:2px"></div>
+      </div>
+      <button onclick="closePreviewVars()" style="background:none;border:none;color:#6b8aaa;font-size:1.4rem;cursor:pointer;line-height:1;padding:4px 8px;border-radius:6px" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='none'">✕</button>
+    </div>
+    <!-- Body -->
+    <div id="pvModalBody" style="padding:18px 20px;min-height:120px">
+      <div id="pvModalLoading" style="text-align:center;padding:32px 0;color:#5fcf8d">
+        <div style="font-size:1.4rem;margin-bottom:8px">⏳</div>
+        <div style="font-size:0.82rem;color:#6b8aaa">Consultando el portal SENAMHI…</div>
+      </div>
+      <div id="pvModalContent" style="display:none"></div>
+    </div>
+    <!-- Footer -->
+    <div id="pvModalFooter" style="display:none;padding:10px 20px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:#6b8aaa"></div>
+  </div>
+</div>
+
+<script>
+function previewVariables(btn) {
+  const stationName = btn.dataset.name || '';
+  const stationCode = btn.dataset.cod  || '';
+
+  // Obtener fechas del mismo row
+  const fromInput = btn.parentNode.querySelector('.dl-from');
+  const toInput   = btn.parentNode.querySelector('.dl-to');
+  const fromDate  = fromInput ? fromInput.value : '2015-01-01';
+  const toDate    = toInput   ? toInput.value   : new Date().toISOString().slice(0,10);
+
+  // Mostrar modal en estado "cargando"
+  const modal = document.getElementById('previewVarsModal');
+  document.getElementById('pvModalStation').textContent = stationName;
+  document.getElementById('pvModalLoading').style.display = 'block';
+  document.getElementById('pvModalContent').style.display = 'none';
+  document.getElementById('pvModalContent').innerHTML = '';
+  document.getElementById('pvModalFooter').style.display = 'none';
+  modal.style.display = 'flex';
+
+  fetch('/api/preview_variables', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ station_name: stationName, station_code: stationCode,
+                           from_date: fromDate, to_date: toDate })
+  })
+  .then(r => r.json())
+  .then(j => {
+    document.getElementById('pvModalLoading').style.display = 'none';
+    const content = document.getElementById('pvModalContent');
+    content.style.display = 'block';
+
+    if (!j.ok) {
+      content.innerHTML = `<div style="text-align:center;padding:20px 0;color:#f59e0b;font-size:0.85rem">⚠️ ${j.error || 'No se encontraron datos'}</div>`;
+      return;
+    }
+
+    // Renderizar lista de variables con valor de muestra
+    const cols = j.columns || [];
+    const sample = j.sample || {};
+    let html = `<div style="display:flex;flex-direction:column;gap:4px">`;
+    cols.forEach((col, i) => {
+      const val = sample[col];
+      const hasVal = val !== null && val !== undefined && val !== 'None' && val !== 'nan';
+      html += `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;
+             border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.05)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:20px;height:20px;border-radius:50%;background:rgba(95,207,141,0.15);
+                  color:#5fcf8d;font-size:0.65rem;font-weight:700;display:flex;align-items:center;
+                  justify-content:center;flex-shrink:0">${i+1}</span>
+            <span style="font-size:0.82rem;font-weight:500;color:#e2f0e8">${col}</span>
+          </div>
+          <span style="font-size:0.75rem;color:${hasVal ? '#5fcf8d' : '#4a5568'};
+                font-family:'Courier New',monospace;max-width:160px;overflow:hidden;
+                text-overflow:ellipsis;white-space:nowrap" title="${hasVal ? val : 'sin valor'}">
+            ${hasVal ? val : '—'}
+          </span>
+        </div>`;
+    });
+    html += '</div>';
+    content.innerHTML = html;
+
+    // Footer con info del período consultado
+    const footer = document.getElementById('pvModalFooter');
+    footer.style.display = 'block';
+    footer.innerHTML = `Muestra del período <strong style="color:#e2f0e8">${j.period}</strong> &nbsp;·&nbsp; ${j.rows_in_period} registros en ese mes`;
+  })
+  .catch(err => {
+    document.getElementById('pvModalLoading').style.display = 'none';
+    document.getElementById('pvModalContent').style.display = 'block';
+    document.getElementById('pvModalContent').innerHTML =
+      `<div style="text-align:center;padding:20px 0;color:#ef4444;font-size:0.85rem">Error de red: ${err}</div>`;
+  });
+}
+
+function closePreviewVars() {
+  document.getElementById('previewVarsModal').style.display = 'none';
+}
+// Cerrar con Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePreviewVars(); });
+// Cerrar clickando fuera
+document.getElementById('previewVarsModal').addEventListener('click', function(e) {
+  if (e.target === this) closePreviewVars();
+});
 </script>
 
 <!-- Modal para listar descargas del sitio antiguo -->

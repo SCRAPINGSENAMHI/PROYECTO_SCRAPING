@@ -1758,6 +1758,109 @@ def api_process_all():
     return jsonify({'saved_files': [str(p) for p in saved]})
 
 
+@app.route('/api/preview_variables', methods=['POST'])
+def api_preview_variables():
+    """
+    Hace 1 sola petición a export.php para descubrir qué variables/columnas
+    tiene una estación, sin descargar ni guardar nada.
+    Prueba hasta 12 meses hacia atrás desde to_date hasta encontrar datos.
+    """
+    import time as _time
+    import pandas as _pd
+
+    data = request.json or {}
+    name      = data.get('station_name', '')
+    code      = data.get('station_code', '')
+    from_date = data.get('from_date', '2015-01-01')
+    to_date   = data.get('to_date') or __import__('datetime').datetime.now().strftime('%Y-%m-%d')
+
+    global scraper
+    if scraper is None:
+        scraper = _load_scraper_module()
+    if scraper is None:
+        return jsonify({'ok': False, 'error': 'scraper no disponible'}), 500
+
+    # Cargar estaciones y localizar la fila
+    try:
+        df = scraper.get_stations(use_local=True)
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+    df_work = df.copy().reset_index(drop=True)
+    iloc_idx = None
+    if code:
+        mask = df_work['cod'].astype(str).str.strip().str.upper() == str(code).strip().upper()
+        if mask.any():
+            iloc_idx = df_work.index.get_loc(df_work[mask].index[0])
+    if iloc_idx is None and name:
+        mask = df_work['estacion'].astype(str).str.contains(str(name), case=False, na=False)
+        if mask.any():
+            iloc_idx = df_work.index.get_loc(df_work[mask].index[0])
+    if iloc_idx is None:
+        return jsonify({'ok': False, 'error': 'Estación no encontrada'}), 404
+
+    row = df_work.iloc[iloc_idx]
+
+    # Obtener candidatos de parámetros (ico, estado, cod_old)
+    candidates = scraper._resolve_portal_params(row)
+    if not candidates:
+        cod_str = str(row.get('cod') or '').strip()
+        remote = scraper._get_remote_params_for_station(cod_str, verbose=False)
+        if remote:
+            candidates = [{'cod': cod_str, 'ico': remote['ico'],
+                           'estado_portal': remote['estado'], 'cod_old': remote['cod_old']}]
+    if not candidates:
+        return jsonify({'ok': False, 'error': 'No se pudieron determinar parámetros del portal'}), 400
+
+    # Meses a probar: desde to_date hacia atrás, máx 18 meses
+    try:
+        months = _pd.date_range(from_date, to_date, freq='MS').strftime('%Y%m').tolist()
+        months = list(reversed(months))[:18]
+    except Exception:
+        months = []
+    if not months:
+        return jsonify({'ok': False, 'error': 'Rango de fechas inválido'}), 400
+
+    session = scraper._build_senamhi_session()
+    base_url = 'https://www.senamhi.gob.pe/mapas/mapa-estaciones-2/export.php'
+
+    for cand in candidates[:4]:
+        for ym in months:
+            params = {'estaciones': cand['cod'], 'CBOFiltro': ym,
+                      't_e': cand['ico'], 'estado': cand['estado_portal']}
+            if cand.get('cod_old'):
+                params['cod_old'] = cand['cod_old']
+            link = base_url + '?' + '&'.join(f"{k}={v}" for k, v in params.items())
+            try:
+                resp = session.get(link, timeout=20)
+                _time.sleep(0.8)
+            except Exception:
+                continue
+            if resp.status_code != 200:
+                continue
+            df_data = scraper._parse_export_html(resp.text)
+            if df_data is not None and len(df_data) > 0:
+                cols = [str(c).strip() for c in df_data.columns.tolist() if str(c).strip()]
+                # Muestra de 1 fila para ver valores de ejemplo
+                sample = {}
+                try:
+                    for c in cols:
+                        v = df_data[c].dropna().iloc[0] if df_data[c].notna().any() else None
+                        sample[c] = str(v) if v is not None else None
+                except Exception:
+                    pass
+                return jsonify({
+                    'ok': True,
+                    'station': str(row.get('estacion') or ''),
+                    'columns': cols,
+                    'sample': sample,
+                    'period': ym,
+                    'rows_in_period': len(df_data),
+                })
+
+    return jsonify({'ok': False, 'error': 'No se encontraron datos en el rango especificado'})
+
+
 @app.route('/api/save', methods=['GET'])
 def api_save_get():
     # Quick GET wrapper to request saving by station name/code from query params
