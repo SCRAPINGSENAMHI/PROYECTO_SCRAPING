@@ -414,8 +414,8 @@ fetch('/api/stations')
   .catch(err => {
     console.warn('No se pudo obtener estaciones desde API:', err);
     STATIONS_POOL = [
-      {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88},
-      {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91}
+      {name:'MUESTRA A',tipo:'Automática',dept:'LIMA',cuenca:'Rímac',prec:2.4,temp:18.5,act:88,lat:-12.0464,lon:-77.0428},
+      {name:'MUESTRA B',tipo:'Convencional',dept:'CUSCO',cuenca:'Urubamba',prec:6.1,temp:12.3,act:91,lat:-13.5176,lon:-71.9780}
     ];
     if (typeof initLeaflet === 'function') initLeaflet();
     if (typeof plotStationsOnMap === 'function') plotStationsOnMap(STATIONS_POOL);
@@ -1377,9 +1377,6 @@ function plotStationsOnMap(stations) {
   // fitBounds se maneja externamente (fetchAndShowLayer) para no competir con el zoom de polígono
   console.log('plotStationsOnMap -> markers=', markers.length);
   console.log('plotStationsOnMap -> counts by type', countByType);
-  if (debugSamples.length) {
-    try { console.log('plotStationsOnMap -> debugSamples (first 40)'); console.table(debugSamples.slice(0,20)); } catch(e) { console.log(debugSamples); }
-  }
   // actualizar contador visual en el badge del mapa
   try { document.getElementById('map-dept-label').textContent = (markers.length ? markers.length + ' Estaciones' : document.getElementById('map-dept-label').textContent); } catch(e){}
   try { const badge = document.getElementById('markerCountBadge'); if(badge) badge.textContent = markers.length + ' puntos'; } catch(e){}
