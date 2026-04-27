@@ -292,7 +292,38 @@ function doLogin(){
   <div style="height:3px;background:rgba(255,255,255,0.05)">
     <div id="dlProgressBar" style="height:100%;background:linear-gradient(90deg,#2f6b46,#5fcf8d);width:5%;transition:width 0.5s ease;border-radius:2px"></div>
   </div>
-  <div id="dlProgressLog" style="padding:10px 14px;max-height:160px;overflow-y:auto;font-size:0.71rem;line-height:1.75;color:#a0bfaa;font-family:'Courier New',monospace;word-break:break-all;"></div>
+  <!-- ── CALENDARIO DE DATOS ── -->
+  <div id="dlCalendarWrap" style="padding:10px 14px 6px;border-bottom:1px solid rgba(255,255,255,0.05)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+      <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:#5fcf8d;font-weight:700">Calendario de datos</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="dlCalStats" style="font-size:0.68rem;color:#6b8aaa"></span>
+        <span style="display:flex;align-items:center;gap:3px;font-size:0.62rem;color:#5a8f70">
+          <span style="width:8px;height:8px;background:#3b82f6;border-radius:2px;display:inline-block"></span>Con datos
+          <span style="width:8px;height:8px;background:#1f2d25;border-radius:2px;border:1px solid rgba(255,255,255,0.08);display:inline-block;margin-left:4px"></span>Sin datos
+        </span>
+      </div>
+    </div>
+    <!-- encabezado meses -->
+    <div style="display:grid;grid-template-columns:30px repeat(12,1fr);gap:2px;margin-bottom:2px">
+      <div></div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">E</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">F</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">M</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">A</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">M</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">J</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">J</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">A</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">S</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">O</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">N</div>
+      <div style="text-align:center;font-size:0.58rem;color:#4a6a55">D</div>
+    </div>
+    <div id="dlCalendarGrid" style="display:flex;flex-direction:column;gap:2px;max-height:110px;overflow-y:auto"></div>
+  </div>
+  <!-- ── LOG TERMINAL (colapsable) ── -->
+  <div id="dlProgressLog" style="padding:8px 14px;max-height:80px;overflow-y:auto;font-size:0.68rem;line-height:1.6;color:#5a8070;font-family:'Courier New',monospace;word-break:break-all;"></div>
   <div id="dlProgressFooter" style="display:none;padding:10px 16px;border-top:1px solid rgba(255,255,255,0.06);font-size:0.78rem;font-weight:600;align-items:center;gap:8px;"></div>
 </div>
 <style>
@@ -1059,6 +1090,9 @@ let _dlPanelFooter = null;
 let _dlPanelDot = null;
 let _dlSeenLogs = 0;       // cuántos logs ya mostramos (evita duplicados)
 let _dlEstimatedMonths = 0; // estimación de meses a descargar para la barra
+let _dlCalGrid = null;      // div del grid del calendario
+let _dlCalStats = null;     // span de estadísticas
+let _dlCalData = {};        // {YYYYMM: true/false} datos por mes
 
 function _initDlPanel() {
   _dlPanel        = document.getElementById('dlProgressPanel');
@@ -1067,11 +1101,14 @@ function _initDlPanel() {
   _dlPanelStation = document.getElementById('dlProgressStation');
   _dlPanelFooter  = document.getElementById('dlProgressFooter');
   _dlPanelDot     = document.getElementById('dlProgressDot');
+  _dlCalGrid      = document.getElementById('dlCalendarGrid');
+  _dlCalStats     = document.getElementById('dlCalStats');
 }
 
 function _showDlPanel(stationName, fromDate, toDate) {
   if (!_dlPanel) _initDlPanel();
   _dlSeenLogs = 0;
+  _dlCalData = {};
   // Estimar meses entre fechas para la barra de progreso
   try {
     const d1 = new Date(fromDate), d2 = new Date(toDate);
@@ -1079,6 +1116,8 @@ function _showDlPanel(stationName, fromDate, toDate) {
   } catch(e) { _dlEstimatedMonths = 60; }
   _dlPanelStation.textContent = stationName;
   _dlPanelLog.innerHTML = '';
+  if (_dlCalGrid) _dlCalGrid.innerHTML = '';
+  if (_dlCalStats) _dlCalStats.textContent = '';
   _dlPanelBar.style.width = '5%';
   _dlPanelBar.style.background = 'linear-gradient(90deg,#2f6b46,#5fcf8d)';
   _dlPanelFooter.style.display = 'none';
@@ -1087,30 +1126,87 @@ function _showDlPanel(stationName, fromDate, toDate) {
   _dlPanel.style.display = 'block';
 }
 
+function _renderCalendar() {
+  if (!_dlCalGrid) return;
+  // Agrupar por año
+  const years = {};
+  for (const ym in _dlCalData) {
+    const yr = ym.slice(0,4);
+    if (!years[yr]) years[yr] = {};
+    years[yr][parseInt(ym.slice(4,6),10)] = _dlCalData[ym];
+  }
+  const sortedYears = Object.keys(years).sort();
+  _dlCalGrid.innerHTML = '';
+  sortedYears.forEach(yr => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:grid;grid-template-columns:30px repeat(12,1fr);gap:2px;align-items:center';
+    // Etiqueta año
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:0.6rem;color:#5a8f70;font-weight:600;text-align:right;padding-right:4px';
+    lbl.textContent = yr;
+    row.appendChild(lbl);
+    // 12 celdas mes
+    for (let m = 1; m <= 12; m++) {
+      const cell = document.createElement('div');
+      const hasData = years[yr][m];
+      if (hasData === undefined) {
+        // No procesado aún
+        cell.style.cssText = 'height:11px;border-radius:2px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.04)';
+      } else if (hasData) {
+        cell.style.cssText = 'height:11px;border-radius:2px;background:#3b82f6;box-shadow:0 0 4px rgba(59,130,246,0.4)';
+        cell.title = yr + '-' + String(m).padStart(2,'0') + ': con datos';
+      } else {
+        cell.style.cssText = 'height:11px;border-radius:2px;background:#1a2820;border:1px solid rgba(255,255,255,0.06)';
+        cell.title = yr + '-' + String(m).padStart(2,'0') + ': sin datos';
+      }
+      row.appendChild(cell);
+    }
+    _dlCalGrid.appendChild(row);
+  });
+  // Stats
+  if (_dlCalStats) {
+    const total = Object.keys(_dlCalData).length;
+    const withData = Object.values(_dlCalData).filter(v => v).length;
+    if (total > 0) {
+      const pct = Math.round(withData / total * 100);
+      _dlCalStats.textContent = withData + '/' + total + ' meses (' + pct + '%)';
+      _dlCalStats.style.color = pct > 50 ? '#5fcf8d' : pct > 20 ? '#f59e0b' : '#6b8aaa';
+    }
+  }
+}
+
 function _updateDlPanelLogs(logs) {
   if (!_dlPanelLog || !Array.isArray(logs)) return;
   const newLogs = logs.slice(_dlSeenLogs);
   if (!newLogs.length) return;
   _dlSeenLogs = logs.length;
+  let calendarUpdated = false;
   newLogs.forEach(line => {
     const div = document.createElement('div');
     // Colorear según tipo de línea
     if (line.startsWith('  +')) {
-      div.style.color = '#5fcf8d'; // verde: datos encontrados
+      div.style.color = '#3b82f6'; // azul: datos encontrados
+      // Extraer YYYYMM del log: "  + 202401: 30 registros"
+      const m = line.match(/\+\s*(\d{6})/);
+      if (m) { _dlCalData[m[1]] = true; calendarUpdated = true; }
     } else if (line.startsWith('  -') || line.includes('sin datos')) {
-      div.style.color = '#5a8f70'; // gris-verde: sin datos ese mes
+      div.style.color = '#3d5247'; // gris oscuro: sin datos ese mes
+      const m = line.match(/-\s*(\d{6})/);
+      if (m) { _dlCalData[m[1]] = false; calendarUpdated = true; }
     } else if (line.startsWith('  !') || line.toLowerCase().includes('error')) {
       div.style.color = '#f59e0b'; // amarillo: advertencia
     } else if (line.startsWith('  >')) {
-      div.style.color = '#a0bfaa'; // neutro: info
+      div.style.color = '#4a6a55'; // neutro: info
     } else {
-      div.style.color = '#a0bfaa';
+      div.style.color = '#4a6a55';
     }
     div.textContent = line;
     _dlPanelLog.appendChild(div);
   });
-  // Auto-scroll al fondo
+  // Auto-scroll al fondo del log
   _dlPanelLog.scrollTop = _dlPanelLog.scrollHeight;
+  // Actualizar calendario si hubo cambios
+  if (calendarUpdated) _renderCalendar();
   // Actualizar barra de progreso basada en meses procesados
   const mesesProcesados = logs.filter(l => l.startsWith('  +') || l.startsWith('  -')).length;
   const pct = Math.min(95, 5 + Math.round((mesesProcesados / _dlEstimatedMonths) * 90));
