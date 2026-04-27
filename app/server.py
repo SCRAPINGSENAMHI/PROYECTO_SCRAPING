@@ -1812,14 +1812,23 @@ def api_preview_variables():
     if not candidates:
         return jsonify({'ok': False, 'error': 'No se pudieron determinar parámetros del portal'}), 400
 
-    # Solo probar los 3 meses más recientes del rango — basta 1 hit para ver columnas
+    # Distribuir intentos a lo largo del rango completo para encontrar datos
+    # aunque la estación solo tenga datos en años pasados.
+    # Estrategia: muestrear ~8 puntos distribuidos (fin, 3/4, 1/2, 1/4, inicio)
     try:
-        months = _pd.date_range(from_date, to_date, freq='MS').strftime('%Y%m').tolist()
-        months = list(reversed(months))[:3]
+        all_months = _pd.date_range(from_date, to_date, freq='MS').strftime('%Y%m').tolist()
     except Exception:
-        months = []
-    if not months:
+        all_months = []
+    if not all_months:
         return jsonify({'ok': False, 'error': 'Rango de fechas inválido'}), 400
+
+    n = len(all_months)
+    # Índices distribuidos: fin, 7/8, 3/4, 5/8, 1/2, 3/8, 1/4, 1/8, inicio
+    indices = sorted(set([
+        n-1, max(0, n*7//8), max(0, n*3//4), max(0, n*5//8),
+        max(0, n//2), max(0, n*3//8), max(0, n//4), max(0, n//8), 0
+    ]), reverse=True)
+    months = [all_months[i] for i in indices]
 
     session = scraper._build_senamhi_session()
     base_url = 'https://www.senamhi.gob.pe/mapas/mapa-estaciones-2/export.php'
