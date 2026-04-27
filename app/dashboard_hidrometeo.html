@@ -1276,81 +1276,97 @@ function plotStationsOnMap(stations) {
   if (!leafletMap) initLeaflet();
   stationsLayer.clearLayers();
   const markers = [];
-  const countWithCoords = stations.filter(s => s && s.lat != null && s.lon != null).length;
-  console.log('plotStationsOnMap -> total stations=', stations.length, 'with coords=', countWithCoords);
   let countByType = { automatica: 0, convencional: 0, other: 0 };
-  const debugSamples = [];
-  stations.forEach((s, si) => {
-    if (s.lat == null || s.lon == null) return;
-    // Determinar color del marcador segun tipo Y estado operativo:
-    //   - INACTIVA o CLAUSURADA o SUSPENDIDA => gris (#888888)
-    //   - PARCIALMENTE activa               => naranja (#d4853a)
-    //   - Convencional operativa            => verde (#6aa37f)
-    //   - Automatica operativa              => azul (#4da6ff)
-    function normalizeStr(x){
-      try { return (x||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(); }
-      catch(e){ return (x||'').toString().toLowerCase(); }
-    }
+
+  const SENSOR_LABELS = {
+    'PLU':'Pluviométrica','HLM':'Hidrométrica','CO':'Climatológica Ordinaria',
+    'CP':'Climatológica Principal','HLG':'Hidrológica','MAP':'Meteorológica Auto.',
+    'PE':'Pluviométrica Especial','EHA':'Hidrológica Auto.','EMA':'Meteorológica Auto.',
+    'EAMA':'Agrometeorológica Auto.','EHMA':'Hidrometeorológica Auto.','EAA':'Agroclimática Auto.'
+  };
+  const SENSOR_VARS = {
+    'PLU':'Precipitación','HLM':'Nivel · Caudal','CO':'Precip · Temp · Humedad · Viento',
+    'CP':'Precip · Temp · Humedad · Viento · Evap','HLG':'Nivel · Caudal',
+    'MAP':'Precipitación','PE':'Precipitación','EHA':'Nivel · Caudal auto.',
+    'EMA':'Temp · Humedad · Viento · Rad. Solar','EAMA':'Agrometeorología completa',
+    'EHMA':'Hidro + Meteo automático','EAA':'Agroclimatología'
+  };
+
+  function normalizeStr(x){
+    try { return (x||'').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase(); }
+    catch(e){ return (x||'').toString().toLowerCase(); }
+  }
+
+  function getTipoKey(s) {
     const estadoNorm = normalizeStr(s.estadoOp || '');
-    const tipoNorm = normalizeStr(s.tipo);
-    let tipoKey;
-    if (estadoNorm === 'inactiva' || estadoNorm.indexOf('clausur') !== -1 || estadoNorm.indexOf('suspend') !== -1) {
-      tipoKey = 'inactiva';
-    } else if (estadoNorm === 'parcial' || estadoNorm.indexOf('parcial') !== -1) {
-      tipoKey = 'parcial';
-    } else if (tipoNorm.indexOf('conv') !== -1) {
-      tipoKey = 'convencional';
-    } else if (tipoNorm.indexOf('auto') !== -1) {
-      tipoKey = 'automatica';
-    } else {
-      tipoKey = 'convencional'; // fallback
-    }
-    const color = TYPE_COLOR[tipoKey] || '#6aa37f';
-    if (tipoKey in countByType) countByType[tipoKey]++; else countByType.other++;
-    if (si < 40) debugSamples.push({ idx: si, name: s.name, tipo_raw: s.tipo || null, estadoOp: s.estadoOp || null, tipoKey, color });
-    const opts = { radius: STATION_RADIUS, color: '#111827', weight:0.8, fillColor: color, fillOpacity:0.95 }; 
-    try { opts.pane = 'stationsPane'; } catch(e){}
-    const marker = L.circleMarker([s.lat, s.lon], opts);
-    const SENSOR_LABELS = {
-      'PLU':'Pluviométrica','HLM':'Hidrométrica','CO':'Climatológica Ordinaria',
-      'CP':'Climatológica Principal','HLG':'Hidrológica','MAP':'Meteorológica Auto.',
-      'PE':'Pluviométrica Especial','EHA':'Hidrológica Auto.','EMA':'Meteorológica Auto.',
-      'EAMA':'Agrometeorológica Auto.','EHMA':'Hidrometeorológica Auto.','EAA':'Agroclimática Auto.'
-    };
-    const SENSOR_VARS = {
-      'PLU':'Precipitación','HLM':'Nivel · Caudal','CO':'Precip · Temp · Humedad · Viento',
-      'CP':'Precip · Temp · Humedad · Viento · Evap','HLG':'Nivel · Caudal',
-      'MAP':'Precipitación','PE':'Precipitación','EHA':'Nivel · Caudal auto.',
-      'EMA':'Temp · Humedad · Viento · Rad. Solar','EAMA':'Agrometeorología completa',
-      'EHMA':'Hidro + Meteo automático','EAA':'Agroclimatología'
-    };
+    const tipoNorm   = normalizeStr(s.tipo || '');
+    if (estadoNorm === 'inactiva' || estadoNorm.includes('clausur') || estadoNorm.includes('suspend')) return 'inactiva';
+    if (estadoNorm === 'parcial'  || estadoNorm.includes('parcial')) return 'parcial';
+    if (tipoNorm.includes('auto')) return 'automatica';
+    return 'convencional';
+  }
+
+  function buildStationCard(s) {
+    const tipoKey    = getTipoKey(s);
+    const color      = TYPE_COLOR[tipoKey] || '#6aa37f';
     const sensorCode = (s.tipoSensor || '').toUpperCase();
-    const sensorLabel = SENSOR_LABELS[sensorCode] || (s.tipoSensor ? s.tipoSensor : (s.tipo || '—'));
-    const sensorVars  = SENSOR_VARS[sensorCode]  || '—';
-    const isAprox = (s.alt_fuente === 'DEM_local');
-    const altRow = s.altitud != null
+    const sensorLabel= SENSOR_LABELS[sensorCode] || (s.tipoSensor || s.tipo || '—');
+    const sensorVars = SENSOR_VARS[sensorCode]   || '—';
+    const isAprox    = s.alt_fuente === 'DEM_local';
+    const altRow     = s.altitud != null
       ? `<div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Altitud:</span> <strong>${s.altitud.toLocaleString()} m.s.n.m.</strong>${isAprox ? ' <span style="color:#f59e0b;font-size:0.7rem">(aprox. DEM)</span>' : ''}</div>`
       : '';
-    const popup = `
-      <div style="min-width:200px;font-family:\'Inter\',sans-serif">
-        <div style="font-weight:700;font-size:0.9rem;color:${color};margin-bottom:3px">${s.name}</div>
-        <div style="font-size:0.78rem;color:#99b7d1;margin-bottom:7px">${s.dept || ''}${s.cuenca ? ' · ' + s.cuenca : ''}${s.cod ? ' · Cód: ' + s.cod : ''}</div>
-        <div style="font-size:0.78rem;line-height:1.7">
-          <span style="color:#99b7d1">Tipo:</span> <strong>${sensorLabel}</strong>
-        </div>
-        <div style="font-size:0.78rem;line-height:1.7">
-          <span style="color:#99b7d1">Variables:</span> ${sensorVars}
-        </div>
-        ${altRow}
-        <div style="font-size:0.78rem;line-height:1.7">
-          <span style="color:#99b7d1">Estado:</span> <strong>${s.estadoOp || '—'}</strong>
-        </div>
-      </div>`;
-    marker.bindPopup(popup, { maxWidth: 280, className: 'stn-popup-hidro' });
-    // IMPORTANTE: NO llamar renderTable/plotStationsOnMap desde aquí
-    // porque plotStationsOnMap hace clearLayers() y destruye el marcador
-    // antes de que Leaflet pueda abrir el popup.
-    // Solo actualizamos el breadcrumb sin tocar el mapa.
+    return `<div style="min-width:210px;font-family:'Inter',sans-serif;padding-bottom:6px">
+      <div style="font-weight:700;font-size:0.9rem;color:${color};margin-bottom:3px">${s.name}</div>
+      <div style="font-size:0.78rem;color:#99b7d1;margin-bottom:6px">${s.dept||''}${s.cuenca?' · '+s.cuenca:''}${s.cod?' · Cód: '+s.cod:''}</div>
+      <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Tipo:</span> <strong>${sensorLabel}</strong></div>
+      <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Variables:</span> ${sensorVars}</div>
+      ${altRow}
+      <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Estado:</span> <strong>${s.estadoOp||'—'}</strong></div>
+    </div>`;
+  }
+
+  // Agrupar estaciones con coordenadas muy cercanas (< ~15m) para evitar
+  // marcadores superpuestos que se ocultan unos a otros
+  const COORD_PRECISION = 3; // ~110m de tolerancia
+  const groups = {};
+  stations.forEach(s => {
+    if (s.lat == null || s.lon == null) return;
+    const key = Number(s.lat).toFixed(COORD_PRECISION) + ',' + Number(s.lon).toFixed(COORD_PRECISION);
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+
+  Object.values(groups).forEach(grp => {
+    // Usar la primera estación para posición y color del marcador
+    // Priorizar: OPERATIVA > DIFERIDO; Automatica > Convencional
+    grp.sort((a,b) => {
+      const ea = a.estadoOp === 'OPERATIVA' ? 0 : 1;
+      const eb = b.estadoOp === 'OPERATIVA' ? 0 : 1;
+      if (ea !== eb) return ea - eb;
+      return (a.tipo||'').includes('uto') ? -1 : 1;
+    });
+    const s = grp[0];
+    const tipoKey = getTipoKey(s);
+    const color   = TYPE_COLOR[tipoKey] || '#6aa37f';
+    if (tipoKey in countByType) countByType[tipoKey]++; else countByType.other++;
+
+    const opts = { radius: STATION_RADIUS, color: '#111827', weight: 0.8, fillColor: color, fillOpacity: 0.95 };
+    try { opts.pane = 'stationsPane'; } catch(e){}
+    const marker = L.circleMarker([s.lat, s.lon], opts);
+
+    // Popup: si hay varias estaciones en el mismo punto, mostrar todas separadas
+    let popupHtml;
+    if (grp.length === 1) {
+      popupHtml = buildStationCard(grp[0]);
+    } else {
+      const header = `<div style="font-size:0.7rem;color:#f59e0b;font-weight:600;margin-bottom:8px;text-align:center">
+        📍 ${grp.length} estaciones en este punto</div>`;
+      const divider = `<hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:8px 0">`;
+      popupHtml = header + grp.map(buildStationCard).join(divider);
+    }
+
+    marker.bindPopup(popupHtml, { maxWidth: 300, className: 'stn-popup-hidro' });
     marker.on('click', () => {
       try { document.getElementById('bc-area').textContent = s.dept || 'ÁREA'; } catch(e){}
     });
