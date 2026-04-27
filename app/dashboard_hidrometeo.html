@@ -1183,19 +1183,21 @@ function _updateDlPanelLogs(logs) {
   let calendarUpdated = false;
   newLogs.forEach(line => {
     const div = document.createElement('div');
+    // El servidor hace strip() a las líneas, así que pueden venir con o sin espacios iniciales
+    const trimmed = line.trimStart();
     // Colorear según tipo de línea
-    if (line.startsWith('  +')) {
+    if (trimmed.startsWith('+ ')) {
       div.style.color = '#3b82f6'; // azul: datos encontrados
-      // Extraer YYYYMM del log: "  + 202401: 30 registros"
-      const m = line.match(/\+\s*(\d{6})/);
+      // Extraer YYYYMM del log: "+ 202401: 30 registros"
+      const m = trimmed.match(/^\+\s*(\d{6})/);
       if (m) { _dlCalData[m[1]] = true; calendarUpdated = true; }
-    } else if (line.startsWith('  -') || line.includes('sin datos')) {
+    } else if (trimmed.startsWith('- ') || trimmed.includes('sin datos')) {
       div.style.color = '#3d5247'; // gris oscuro: sin datos ese mes
-      const m = line.match(/-\s*(\d{6})/);
+      const m = trimmed.match(/^-\s*(\d{6})/);
       if (m) { _dlCalData[m[1]] = false; calendarUpdated = true; }
-    } else if (line.startsWith('  !') || line.toLowerCase().includes('error')) {
+    } else if (trimmed.startsWith('! ') || trimmed.toLowerCase().includes('error')) {
       div.style.color = '#f59e0b'; // amarillo: advertencia
-    } else if (line.startsWith('  >')) {
+    } else if (trimmed.startsWith('> ')) {
       div.style.color = '#4a6a55'; // neutro: info
     } else {
       div.style.color = '#4a6a55';
@@ -1208,7 +1210,7 @@ function _updateDlPanelLogs(logs) {
   // Actualizar calendario si hubo cambios
   if (calendarUpdated) _renderCalendar();
   // Actualizar barra de progreso basada en meses procesados
-  const mesesProcesados = logs.filter(l => l.startsWith('  +') || l.startsWith('  -')).length;
+  const mesesProcesados = logs.filter(l => { const t = l.trimStart(); return t.startsWith('+ ') || t.startsWith('- '); }).length;
   const pct = Math.min(95, 5 + Math.round((mesesProcesados / _dlEstimatedMonths) * 90));
   _dlPanelBar.style.width = pct + '%';
 }
