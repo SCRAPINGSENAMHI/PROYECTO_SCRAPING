@@ -229,6 +229,17 @@ function doLogin(){
           </div>
         </div>
 
+        <!-- Panel lateral: área representativa -->
+        <div id="repr-panel">
+          <div id="repr-panel-inner">
+            <div class="repr-close">
+              <h3>AREA REPRESENTATIVA</h3>
+              <button onclick="cerrarReprPanel()" title="Cerrar">&#x2715;</button>
+            </div>
+            <div id="repr-content"><div class="repr-spinner">Selecciona una estacion en el mapa</div></div>
+          </div>
+        </div>
+
         <!-- RIGHT: charts removed as requested -->
 
       </div>
@@ -286,6 +297,58 @@ function doLogin(){
 </div>
 <style>
 @keyframes dlPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.8);}}
+/* ── Panel lateral representatividad ── */
+#repr-panel{
+  position:fixed;top:0;right:-420px;width:400px;height:100vh;
+  background:#0d1b2a;border-left:1px solid rgba(95,207,141,0.2);
+  z-index:2000;transition:right 0.3s ease;overflow-y:auto;
+  box-shadow:-4px 0 24px rgba(0,0,0,0.5);font-family:'Inter',sans-serif;
+}
+#repr-panel.open{right:0;}
+#repr-panel-inner{padding:16px 18px 30px;}
+.repr-close{position:sticky;top:0;background:#0d1b2a;padding:10px 0 8px;
+  display:flex;justify-content:space-between;align-items:center;z-index:1;
+  border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:12px;}
+.repr-close h3{margin:0;font-size:0.95rem;color:#5fcf8d;letter-spacing:0.04em;}
+.repr-close button{background:none;border:none;color:#99b7d1;cursor:pointer;
+  font-size:1.2rem;line-height:1;padding:4px 8px;border-radius:4px;}
+.repr-close button:hover{background:rgba(255,255,255,0.1);}
+.repr-est-name{font-size:1.05rem;font-weight:700;color:#e2e8f0;margin:0 0 2px;}
+.repr-est-sub{font-size:0.78rem;color:#6b8aaa;margin-bottom:14px;}
+.repr-toggle{display:flex;gap:6px;margin-bottom:14px;}
+.repr-toggle button{flex:1;padding:7px 0;border-radius:6px;border:1px solid rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.05);color:#99b7d1;cursor:pointer;font-size:0.8rem;font-weight:600;
+  transition:all 0.15s;}
+.repr-toggle button.active{background:rgba(30,100,200,0.35);border-color:#4da6ff;color:#4da6ff;}
+.repr-toggle button.active.pp{background:rgba(30,100,200,0.35);border-color:#4da6ff;color:#4da6ff;}
+.repr-toggle button.active.temp{background:rgba(220,80,30,0.3);border-color:#f97316;color:#f97316;}
+.repr-stat{display:flex;justify-content:space-between;align-items:baseline;
+  padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+.repr-stat-label{font-size:0.76rem;color:#6b8aaa;}
+.repr-stat-val{font-size:0.88rem;font-weight:600;color:#e2e8f0;}
+.repr-section{margin-top:16px;}
+.repr-section h4{font-size:0.78rem;text-transform:uppercase;letter-spacing:0.08em;
+  color:#5fcf8d;margin:0 0 10px;padding-bottom:4px;border-bottom:1px solid rgba(95,207,141,0.2);}
+.vecina-item{display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;}
+.vecina-item:hover{background:rgba(255,255,255,0.03);border-radius:4px;}
+.vecina-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.vecina-dot.ok{background:#5fcf8d;}
+.vecina-dot.warn{background:#f97316;}
+.vecina-dot.nd{background:#6b8aaa;}
+.vecina-info{flex:1;min-width:0;}
+.vecina-name{font-size:0.82rem;font-weight:600;color:#e2e8f0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.vecina-meta{font-size:0.72rem;color:#6b8aaa;margin-top:1px;}
+.vecina-r{font-size:0.8rem;font-weight:700;text-align:right;min-width:48px;}
+.vecina-r.ok{color:#5fcf8d;}
+.vecina-r.warn{color:#f97316;}
+.vecina-r.nd{color:#6b8aaa;}
+.repr-zona-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:0.72rem;
+  font-weight:600;background:rgba(95,207,141,0.15);color:#5fcf8d;margin-bottom:12px;}
+.repr-spinner{text-align:center;color:#6b8aaa;padding:40px 0;font-size:0.88rem;}
+.repr-error{color:#f97316;font-size:0.85rem;padding:20px 0;text-align:center;}
+
 .stn-popup-hidro .leaflet-popup-content-wrapper{
   background:rgba(10,18,28,0.96)!important;border:1px solid rgba(77,166,255,0.22)!important;
   color:#c9d8e8!important;border-radius:10px!important;box-shadow:0 8px 24px rgba(0,0,0,0.65)!important;}
@@ -1323,6 +1386,7 @@ function plotStationsOnMap(stations) {
       <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Variables:</span> ${sensorVars}</div>
       ${altRow}
       <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Estado:</span> <strong>${s.estadoOp||'—'}</strong></div>
+      ${s.cod ? `<div style="margin-top:8px"><button onclick="mostrarRepresentatividad('qc'+String('${s.cod||''}').replace(/\\D/g,'').padStart(8,'0'),'${(s.name||'').replace(/'/g,"\\'")}');this.closest('.leaflet-popup').querySelector('.leaflet-popup-close-button')?.click();" style="width:100%;padding:5px 0;background:rgba(95,207,141,0.15);border:1px solid rgba(95,207,141,0.3);border-radius:5px;color:#5fcf8d;font-size:0.75rem;cursor:pointer;font-weight:600">Ver area representativa</button></div>` : ''}
     </div>`;
   }
 
@@ -1738,6 +1802,182 @@ style.textContent = `
 @keyframes rat-run{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(4px) scaleX(1)}50%{transform:translateX(0) scaleX(-1)}75%{transform:translateX(-4px) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
 `;
 document.head.appendChild(style);
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+//  REPRESENTATIVIDAD — panel lateral + capas en mapa
+// ══════════════════════════════════════════════════════════════════════════════
+let _reprPoligono  = null;   // capa GeoJSON activa (PP o T°)
+let _reprVecLayers = [];     // flechas + markers de vecinas
+let _reprData      = null;   // datos cargados actualmente
+let _reprVarActual = 'pp';   // 'pp' | 'temp'
+
+// Paleta flechas
+const ARROW_OK   = '#5fcf8d';
+const ARROW_WARN = '#f97316';
+const ARROW_ND   = '#6b8aaa';
+
+function cerrarReprPanel() {
+  document.getElementById('repr-panel').classList.remove('open');
+  _limpiarCapasRepr();
+}
+
+function _limpiarCapasRepr() {
+  if (_reprPoligono && leafletMap) { try { leafletMap.removeLayer(_reprPoligono); } catch(e){} _reprPoligono = null; }
+  _reprVecLayers.forEach(l => { try { leafletMap.removeLayer(l); } catch(e){} });
+  _reprVecLayers = [];
+}
+
+// ── Dibujar polígono de la variable activa ────────────────────────────────────
+function _dibujarPoligono(data, variable) {
+  if (_reprPoligono) { try { leafletMap.removeLayer(_reprPoligono); } catch(e){} _reprPoligono = null; }
+  const varData = data[variable];
+  if (!varData || !varData.geojson) return;
+  const isPP   = variable === 'pp';
+  _reprPoligono = L.geoJSON(varData.geojson, {
+    style: {
+      color:       isPP ? '#4da6ff' : '#f97316',
+      fillColor:   isPP ? '#4da6ff' : '#f97316',
+      fillOpacity: 0.15,
+      weight:      2.5,
+      dashArray:   '8 5',
+    }
+  }).addTo(leafletMap);
+  try { _reprPoligono.bringToFront(); } catch(e){}
+}
+
+// ── Dibujar flechas hacia vecinas ─────────────────────────────────────────────
+function _dibujarVecinas(data, variable) {
+  _reprVecLayers.forEach(l => { try { leafletMap.removeLayer(l); } catch(e){} });
+  _reprVecLayers = [];
+  if (!data.vecinas || !data.vecinas.length) return;
+
+  const sLat = data.lat, sLon = data.lon;
+
+  data.vecinas.forEach(v => {
+    const r = variable === 'pp' ? v.r_pp : v.r_temp;
+    const color = r === null ? ARROW_ND : (r >= 0.80 ? ARROW_OK : ARROW_WARN);
+
+    // Línea con cabeza de flecha (decorador)
+    const line = L.polyline([[sLat, sLon], [v.lat, v.lon]], {
+      color, weight: 2, opacity: 0.85, dashArray: '5 4'
+    });
+    // Flecha al final de la línea usando Leaflet.PolylineDecorator si disponible,
+    // si no: marcador triangular en el destino
+    line.addTo(leafletMap);
+    _reprVecLayers.push(line);
+
+    // Marcador en la vecina
+    const dot = L.circleMarker([v.lat, v.lon], {
+      radius: 7, color: '#111827', weight: 1.5,
+      fillColor: color, fillOpacity: 0.85, pane: 'stationsPane'
+    }).bindPopup(`
+      <div style="font-family:'Inter',sans-serif;min-width:180px">
+        <div style="font-weight:700;font-size:0.9rem;color:${color};margin-bottom:4px">${v.nombre}</div>
+        <div style="font-size:0.76rem;color:#99b7d1">${v.dept || ''} · ${v.dist_km} km</div>
+        <div style="font-size:0.78rem;margin-top:6px">
+          r(PP): <strong style="color:${v.r_pp!==null?(v.r_pp>=0.8?ARROW_OK:ARROW_WARN):ARROW_ND}">${v.r_pp !== null ? v.r_pp : 'sin datos'}</strong><br>
+          r(T°): <strong style="color:${v.r_temp!==null?(v.r_temp>=0.8?ARROW_OK:ARROW_WARN):ARROW_ND}">${v.r_temp !== null ? v.r_temp : 'sin datos'}</strong>
+        </div>
+      </div>`, { className: 'stn-popup-hidro', maxWidth: 220 }
+    );
+    dot.addTo(leafletMap);
+    _reprVecLayers.push(dot);
+  });
+}
+
+// ── Cambiar variable activa (PP / Temperatura) ───────────────────────────────
+function reprCambiarVar(variable) {
+  if (!_reprData) return;
+  _reprVarActual = variable;
+  document.querySelectorAll('.repr-toggle button').forEach(b => {
+    b.classList.toggle('active', b.dataset.var === variable);
+    b.classList.toggle('pp',   b.dataset.var === 'pp'   && variable === 'pp');
+    b.classList.toggle('temp', b.dataset.var === 'temp' && variable === 'temp');
+  });
+  _dibujarPoligono(_reprData, variable);
+  _dibujarVecinas(_reprData, variable);
+  _renderVecinasTabla(_reprData, variable);
+}
+
+// ── Render HTML del panel ─────────────────────────────────────────────────────
+function _renderVecinasTabla(data, variable) {
+  const cont = document.getElementById('repr-vecinas-list');
+  if (!cont) return;
+  cont.innerHTML = data.vecinas.map(v => {
+    const r = variable === 'pp' ? v.r_pp : v.r_temp;
+    const cls = r === null ? 'nd' : (r >= 0.8 ? 'ok' : 'warn');
+    const rStr = r !== null ? r.toFixed(2) : 'N/D';
+    return `<div class="vecina-item" onclick="if(leafletMap)leafletMap.setView([${v.lat},${v.lon}],10)">
+      <div class="vecina-dot ${cls}"></div>
+      <div class="vecina-info">
+        <div class="vecina-name" title="${v.nombre}">${v.nombre}</div>
+        <div class="vecina-meta">${v.dist_km} km · ${v.altitud} m · ${v.dept || ''}</div>
+      </div>
+      <div class="vecina-r ${cls}">r=${rStr}</div>
+    </div>`;
+  }).join('');
+}
+
+function _renderReprPanel(data) {
+  const ppD   = data.pp   || {};
+  const tpD   = data.temp || {};
+  const fmtKm = v => v != null ? `${Number(v).toLocaleString('es-PE', {maximumFractionDigits:0})} km²` : '—';
+  const fmtR  = v => v != null ? `${Number(v).toFixed(1)} km` : '—';
+
+  document.getElementById('repr-content').innerHTML = `
+    <div class="repr-est-name">${data.nombre}</div>
+    <div class="repr-est-sub">${data.dept || ''} · ${Number(data.altitud).toLocaleString()} m.s.n.m.</div>
+    <div class="repr-zona-badge">${data.zona || ''}</div>
+
+    <div class="repr-toggle">
+      <button data-var="pp"   class="active pp"   onclick="reprCambiarVar('pp')">Precipitacion</button>
+      <button data-var="temp"                       onclick="reprCambiarVar('temp')">Temperatura</button>
+    </div>
+
+    <div class="repr-stat"><span class="repr-stat-label">Area PP (±100m, max ${ppD.radio_max||15}km)</span>
+      <span class="repr-stat-val">${fmtKm(ppD.area_km2)}</span></div>
+    <div class="repr-stat"><span class="repr-stat-label">Radio efectivo PP</span>
+      <span class="repr-stat-val">${fmtR(ppD.radio_km)}</span></div>
+    <div class="repr-stat" style="margin-top:6px">
+      <span class="repr-stat-label">Area Temperatura (±200m, max ${tpD.radio_max||30}km)</span>
+      <span class="repr-stat-val">${fmtKm(tpD.area_km2)}</span></div>
+    <div class="repr-stat"><span class="repr-stat-label">Radio efectivo Temperatura</span>
+      <span class="repr-stat-val">${fmtR(tpD.radio_km)}</span></div>
+
+    <div class="repr-section">
+      <h4>Estaciones vecinas (${(data.vecinas||[]).length})</h4>
+      <div id="repr-vecinas-list"></div>
+    </div>`;
+
+  _renderVecinasTabla(data, _reprVarActual);
+}
+
+// ── Función principal: llamada desde buildStationCard / marker click ──────────
+async function mostrarRepresentatividad(cod_qc, nombre) {
+  const panel = document.getElementById('repr-panel');
+  document.getElementById('repr-content').innerHTML = '<div class="repr-spinner">Cargando...</div>';
+  panel.classList.add('open');
+  _limpiarCapasRepr();
+  _reprVarActual = 'pp';
+
+  try {
+    const res = await fetch(`/api/representatividad?cod_qc=${encodeURIComponent(cod_qc)}`);
+    if (!res.ok) {
+      document.getElementById('repr-content').innerHTML =
+        `<div class="repr-error">Sin datos de representatividad para esta estacion.<br><small style="color:#6b8aaa">Solo disponible para estaciones con datos historicos.</small></div>`;
+      return;
+    }
+    _reprData = await res.json();
+    _renderReprPanel(_reprData);
+    _dibujarPoligono(_reprData, 'pp');
+    _dibujarVecinas(_reprData, 'pp');
+  } catch(e) {
+    document.getElementById('repr-content').innerHTML =
+      `<div class="repr-error">Error al cargar: ${e.message}</div>`;
+  }
+}
 </script>
 
 <!-- Modal para listar descargas del sitio antiguo -->

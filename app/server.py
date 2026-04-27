@@ -852,6 +852,26 @@ def api_maestra_list():
         return jsonify({'ok': False, 'error': str(e), 'traceback': tb}), 500
 
 
+@app.route('/api/representatividad')
+def api_representatividad():
+    """Devuelve el JSON pre-calculado de área representativa y vecinas para una estación.
+    Parámetro GET: cod_qc (ej: qc00000301)
+    """
+    cod_qc = (request.args.get('cod_qc') or '').strip()
+    if not cod_qc:
+        return jsonify({'error': 'Parámetro cod_qc requerido'}), 400
+    base = _find_data_dir() / 'representatividad'
+    path = base / f'{cod_qc}.json'
+    if not path.exists():
+        return jsonify({'error': f'Sin datos para {cod_qc}'}), 404
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        return app.response_class(json.dumps(data, ensure_ascii=False), mimetype='application/json')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/outputs')
 def api_outputs():
     base = _find_data_dir() / 'outputs'
