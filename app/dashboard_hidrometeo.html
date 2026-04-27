@@ -1386,7 +1386,7 @@ function plotStationsOnMap(stations) {
       <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Variables:</span> ${sensorVars}</div>
       ${altRow}
       <div style="font-size:0.78rem;line-height:1.7"><span style="color:#99b7d1">Estado:</span> <strong>${s.estadoOp||'—'}</strong></div>
-      ${s.cod ? `<div style="margin-top:8px"><button onclick="mostrarRepresentatividad('qc'+String('${s.cod||''}').replace(/\\D/g,'').padStart(8,'0'),'${(s.name||'').replace(/'/g,"\\'")}');this.closest('.leaflet-popup').querySelector('.leaflet-popup-close-button')?.click();" style="width:100%;padding:5px 0;background:rgba(95,207,141,0.15);border:1px solid rgba(95,207,141,0.3);border-radius:5px;color:#5fcf8d;font-size:0.75rem;cursor:pointer;font-weight:600">Ver area representativa</button></div>` : ''}
+      <div style="margin-top:8px"><button onclick="mostrarRepresentatividad(null,'${(s.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}');try{this.closest('.leaflet-popup').querySelector('.leaflet-popup-close-button').click();}catch(e){}" style="width:100%;padding:5px 0;background:rgba(95,207,141,0.15);border:1px solid rgba(95,207,141,0.3);border-radius:5px;color:#5fcf8d;font-size:0.75rem;cursor:pointer;font-weight:600">Ver area representativa</button></div>
     </div>`;
   }
 
@@ -1962,8 +1962,13 @@ async function mostrarRepresentatividad(cod_qc, nombre) {
   _limpiarCapasRepr();
   _reprVarActual = 'pp';
 
+  // Construir URL: preferir nombre (más fiable que cod_qc reconstruido)
+  let url = '/api/representatividad?';
+  if (nombre) url += 'nombre=' + encodeURIComponent(nombre);
+  else if (cod_qc) url += 'cod_qc=' + encodeURIComponent(cod_qc);
+
   try {
-    const res = await fetch(`/api/representatividad?cod_qc=${encodeURIComponent(cod_qc)}`);
+    const res = await fetch(url);
     if (!res.ok) {
       document.getElementById('repr-content').innerHTML =
         `<div class="repr-error">Sin datos de representatividad para esta estacion.<br><small style="color:#6b8aaa">Solo disponible para estaciones con datos historicos.</small></div>`;

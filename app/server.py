@@ -854,13 +854,46 @@ def api_maestra_list():
 
 @app.route('/api/representatividad')
 def api_representatividad():
-    """Devuelve el JSON pre-calculado de área representativa y vecinas para una estación.
-    Parámetro GET: cod_qc (ej: qc00000301)
+    """Devuelve el JSON pre-calculado de área representativa y vecinas.
+    Parámetros GET: nombre (nombre de estación) o cod_qc (qcXXXXXXXX)
     """
-    cod_qc = (request.args.get('cod_qc') or '').strip()
-    if not cod_qc:
-        return jsonify({'error': 'Parámetro cod_qc requerido'}), 400
+    import unicodedata as _ud
     base = _find_data_dir() / 'representatividad'
+
+    def _norm(s):
+        s = str(s or '').upper().strip()
+        s = _ud.normalize('NFD', s)
+        return ''.join(c for c in s if _ud.category(c) != 'Mn')
+
+    def _load_index():
+        idx_path = base / '_index.json'
+        if idx_path.exists():
+            try:
+                with open(idx_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {}
+
+    # 1. Buscar por nombre
+    nombre = (request.args.get('nombre') or '').strip()
+    cod_qc = (request.args.get('cod_qc') or '').strip()
+
+    if nombre and not cod_qc:
+        idx = _load_index()
+        key = _norm(nombre)
+        # Coincidencia exacta
+        if key in idx:
+            cod_qc = idx[key]['cod_qc']
+        else:
+            # Coincidencia parcial: el índice contiene al nombre buscado
+            matches = [v['cod_qc'] for k, v in idx.items() if key in k or k in key]
+            if matches:
+                cod_qc = matches[0]
+
+    if not cod_qc:
+        return jsonify({'error': 'Sin datos para esta estacion'}), 404
+
     path = base / f'{cod_qc}.json'
     if not path.exists():
         return jsonify({'error': f'Sin datos para {cod_qc}'}), 404
