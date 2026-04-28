@@ -237,9 +237,9 @@ function doLogin(){
               </div>
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
                 <span style="width:52px;color:#6b8aaa">Gamma</span>
-                <input type="range" id="hillGamma" min="0.1" max="2.0" step="0.05" value="0.6"
+                <input type="range" id="hillGamma" min="0.1" max="2.0" step="0.05" value="0.5"
                   oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-                <span id="hillGammaVal" style="width:28px;text-align:right;color:#e2f0e8">0.6</span>
+                <span id="hillGammaVal" style="width:28px;text-align:right;color:#e2f0e8">0.5</span>
               </div>
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="width:52px;color:#6b8aaa">Opacidad</span>
@@ -1447,7 +1447,7 @@ function initLeaflet() {
   hillPaneEl.style.opacity   = '0.7';
   hillPaneEl.style.pointerEvents = 'none';
 
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
+  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.5&opacity=255', {
     opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18,
     attribution: '', pane: 'hillshadePane'
   }).addTo(leafletMap);

@@ -703,7 +703,7 @@ function initMap() {
   hillPaneEl.style.opacity      = '0.7';
   hillPaneEl.style.pointerEvents = 'none';
 
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
+  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.5&opacity=255', {
     opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane'
   }).addTo(map);
 

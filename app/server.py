@@ -1962,14 +1962,28 @@ def api_download_output():
 
 
 # ── HILLSHADE TILE SERVER ─────────────────────────────────────────────────────
-# Sirve tiles XYZ del HILL.tif en tiempo real con resampling cúbico + gamma.
-# URL: /api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=180
+# Cada thread mantiene su propio dataset abierto (evita lock en lecturas).
+# Cache de tiles en memoria (max 3000 tiles ~= 180 MB).
 
-import math as _math
+_HILL_PATH   = None
+_hill_tls    = threading.local()   # thread-local: cada hilo abre el TIF una sola vez
+_tile_cache  = {}                  # {(z,x,y,gamma_key): bytes}
+_tile_cache_lock = threading.Lock()
+MAX_TILE_CACHE = 3000
 
-_HILL_PATH = None
-_HILL_DS   = None   # rasterio dataset abierto (singleton, thread-safe para lectura)
-_HILL_LOCK = threading.Lock()
+# Tile transparente de 1x1 para retornar cuando no hay datos
+_EMPTY_TILE = None
+
+def _get_empty_tile():
+    global _EMPTY_TILE
+    if _EMPTY_TILE is None:
+        from PIL import Image
+        import io as _io
+        img = Image.new('RGBA', (256, 256), (0, 0, 0, 0))
+        buf = _io.BytesIO()
+        img.save(buf, 'PNG')
+        _EMPTY_TILE = buf.getvalue()
+    return _EMPTY_TILE
 
 def _get_hill_path():
     global _HILL_PATH
@@ -1985,10 +1999,18 @@ def _get_hill_path():
             return c
     return None
 
+def _get_thread_dataset():
+    """Abre el dataset una sola vez por hilo — sin lock."""
+    if not getattr(_hill_tls, 'ds', None):
+        import rasterio
+        path = _get_hill_path()
+        if path is None:
+            return None
+        _hill_tls.ds = rasterio.open(str(path))
+    return _hill_tls.ds
+
 def _tile_bbox_3857(z, x, y):
-    """Devuelve (west, south, east, north) en EPSG:3857 para un tile XYZ."""
     n = 2 ** z
-    # Web Mercator extent: ±20037508.3427892
     size = 20037508.3427892 * 2 / n
     west  = x * size - 20037508.3427892
     east  = west + size
@@ -1999,65 +2021,82 @@ def _tile_bbox_3857(z, x, y):
 
 @app.route('/api/hillshade/<int:z>/<int:x>/<int:y>.png')
 def api_hillshade_tile(z, x, y):
-    """Tile dinámico del hillshade con resampling cúbico y corrección gamma."""
+    """Tile dinámico hillshade: resampling cúbico + gamma. Blend multiply en cliente."""
     try:
-        import rasterio
-        from rasterio.warp import reproject, Resampling
-        from rasterio.crs import CRS
         import numpy as np
         from PIL import Image
-        import io as _io
+        from rasterio.warp import reproject, Resampling
+        from rasterio.crs import CRS
+        from rasterio.transform import from_bounds
+        import rasterio, io as _io
     except ImportError as e:
-        return jsonify({'error': f'Dependencia faltante: {e}'}), 500
+        return app.response_class(_get_empty_tile(), mimetype='image/png')
 
-    gamma   = float(request.args.get('gamma',   0.6))
-    opacity = int(request.args.get('opacity',   180))   # 0-255
+    gamma     = max(0.1, min(3.0, float(request.args.get('gamma', 0.5))))
+    gamma_key = round(gamma * 20)   # discretizar para cache (pasos de 0.05)
+
+    # ── Cache ──
+    cache_key = (z, x, y, gamma_key)
+    with _tile_cache_lock:
+        if cache_key in _tile_cache:
+            resp = app.response_class(_tile_cache[cache_key], mimetype='image/png')
+            resp.headers['Cache-Control'] = 'public, max-age=86400'
+            return resp
+
+    # ── Calcular tile ──
+    west, south, east, north = _tile_bbox_3857(z, x, y)
     TILE_SIZE = 256
 
-    hill_path = _get_hill_path()
-    if not hill_path:
-        return jsonify({'error': 'HILL.tif no encontrado'}), 404
-
-    # Clamp parámetros
-    gamma   = max(0.1, min(3.0, gamma))
-    opacity = max(0, min(255, opacity))
-
-    west, south, east, north = _tile_bbox_3857(z, x, y)
-    dst_crs = CRS.from_epsg(3857)
-
     try:
-        with _HILL_LOCK:
-            with rasterio.open(str(hill_path)) as src:
-                from rasterio.transform import from_bounds
-                dst_transform = from_bounds(west, south, east, north, TILE_SIZE, TILE_SIZE)
-                dst_arr = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.uint8)
-                reproject(
-                    source=rasterio.band(src, 1),
-                    destination=dst_arr,
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=dst_transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.cubic,
-                )
+        src = _get_thread_dataset()
+        if src is None:
+            return app.response_class(_get_empty_tile(), mimetype='image/png')
+
+        dst_crs = CRS.from_epsg(3857)
+        dst_transform = from_bounds(west, south, east, north, TILE_SIZE, TILE_SIZE)
+        dst_arr = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.uint8)
+
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=dst_arr,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=dst_transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.cubic,
+        )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f'[hillshade] error tile {z}/{x}/{y}: {e}')
+        return app.response_class(_get_empty_tile(), mimetype='image/png')
 
-    # Aplicar gamma: out = (in/255)^gamma * 255
-    arr_f = dst_arr.astype(np.float32) / 255.0
-    arr_f = np.power(np.clip(arr_f, 0, 1), gamma)
-    arr_u8 = (arr_f * 255).astype(np.uint8)
+    # Tile completamente vacío → transparente
+    if dst_arr.max() == 0:
+        data = _get_empty_tile()
+        with _tile_cache_lock:
+            if len(_tile_cache) < MAX_TILE_CACHE:
+                _tile_cache[cache_key] = data
+        resp = app.response_class(data, mimetype='image/png')
+        resp.headers['Cache-Control'] = 'public, max-age=86400'
+        return resp
 
-    # Crear PNG RGBA: canal alpha = opacity solo donde hay datos
-    alpha = np.where(dst_arr > 0, opacity, 0).astype(np.uint8)
-    rgba = np.stack([arr_u8, arr_u8, arr_u8, alpha], axis=-1)
+    # Aplicar gamma
+    arr_f = np.power(dst_arr.astype(np.float32) / 255.0, gamma)
+    arr_u8 = (np.clip(arr_f, 0, 1) * 255).astype(np.uint8)
+
+    # RGBA: alpha=255 donde hay datos (blend mode multiply en cliente controla la mezcla)
+    alpha = np.where(dst_arr > 0, 255, 0).astype(np.uint8)
+    rgba  = np.stack([arr_u8, arr_u8, arr_u8, alpha], axis=-1)
 
     img = Image.fromarray(rgba, 'RGBA')
     buf = _io.BytesIO()
-    img.save(buf, 'PNG', optimize=False, compress_level=1)
-    buf.seek(0)
+    img.save(buf, 'PNG', compress_level=1)
+    data = buf.getvalue()
 
-    resp = app.response_class(buf.read(), mimetype='image/png')
+    with _tile_cache_lock:
+        if len(_tile_cache) < MAX_TILE_CACHE:
+            _tile_cache[cache_key] = data
+
+    resp = app.response_class(data, mimetype='image/png')
     resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
 
