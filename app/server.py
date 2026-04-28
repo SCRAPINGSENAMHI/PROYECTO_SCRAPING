@@ -1961,5 +1961,106 @@ def api_download_output():
         return jsonify({'error': str(e)}), 500
 
 
+# ── HILLSHADE TILE SERVER ─────────────────────────────────────────────────────
+# Sirve tiles XYZ del HILL.tif en tiempo real con resampling cúbico + gamma.
+# URL: /api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=180
+
+import math as _math
+
+_HILL_PATH = None
+_HILL_DS   = None   # rasterio dataset abierto (singleton, thread-safe para lectura)
+_HILL_LOCK = threading.Lock()
+
+def _get_hill_path():
+    global _HILL_PATH
+    if _HILL_PATH:
+        return _HILL_PATH
+    candidates = [
+        Path(__file__).resolve().parent.parent / 'DATA' / 'DEM' / 'HILL.tif',
+        Path('g:/1_PROYECTOS/WEBSCRAPING/Web_Scraping_SENAMHI_/DATA/DEM/HILL.tif'),
+    ]
+    for c in candidates:
+        if c.exists():
+            _HILL_PATH = c
+            return c
+    return None
+
+def _tile_bbox_3857(z, x, y):
+    """Devuelve (west, south, east, north) en EPSG:3857 para un tile XYZ."""
+    n = 2 ** z
+    # Web Mercator extent: ±20037508.3427892
+    size = 20037508.3427892 * 2 / n
+    west  = x * size - 20037508.3427892
+    east  = west + size
+    north = 20037508.3427892 - y * size
+    south = north - size
+    return west, south, east, north
+
+
+@app.route('/api/hillshade/<int:z>/<int:x>/<int:y>.png')
+def api_hillshade_tile(z, x, y):
+    """Tile dinámico del hillshade con resampling cúbico y corrección gamma."""
+    try:
+        import rasterio
+        from rasterio.warp import reproject, Resampling
+        from rasterio.crs import CRS
+        import numpy as np
+        from PIL import Image
+        import io as _io
+    except ImportError as e:
+        return jsonify({'error': f'Dependencia faltante: {e}'}), 500
+
+    gamma   = float(request.args.get('gamma',   0.6))
+    opacity = int(request.args.get('opacity',   180))   # 0-255
+    TILE_SIZE = 256
+
+    hill_path = _get_hill_path()
+    if not hill_path:
+        return jsonify({'error': 'HILL.tif no encontrado'}), 404
+
+    # Clamp parámetros
+    gamma   = max(0.1, min(3.0, gamma))
+    opacity = max(0, min(255, opacity))
+
+    west, south, east, north = _tile_bbox_3857(z, x, y)
+    dst_crs = CRS.from_epsg(3857)
+
+    try:
+        with _HILL_LOCK:
+            with rasterio.open(str(hill_path)) as src:
+                from rasterio.transform import from_bounds
+                dst_transform = from_bounds(west, south, east, north, TILE_SIZE, TILE_SIZE)
+                dst_arr = np.zeros((TILE_SIZE, TILE_SIZE), dtype=np.uint8)
+                reproject(
+                    source=rasterio.band(src, 1),
+                    destination=dst_arr,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.cubic,
+                )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    # Aplicar gamma: out = (in/255)^gamma * 255
+    arr_f = dst_arr.astype(np.float32) / 255.0
+    arr_f = np.power(np.clip(arr_f, 0, 1), gamma)
+    arr_u8 = (arr_f * 255).astype(np.uint8)
+
+    # Crear PNG RGBA: canal alpha = opacity solo donde hay datos
+    alpha = np.where(dst_arr > 0, opacity, 0).astype(np.uint8)
+    rgba = np.stack([arr_u8, arr_u8, arr_u8, alpha], axis=-1)
+
+    img = Image.fromarray(rgba, 'RGBA')
+    buf = _io.BytesIO()
+    img.save(buf, 'PNG', optimize=False, compress_level=1)
+    buf.seek(0)
+
+    resp = app.response_class(buf.read(), mimetype='image/png')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
