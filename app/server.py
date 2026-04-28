@@ -98,11 +98,15 @@ def _find_data_dir():
     return p / 'DATA'
 
 
+_DEPLOY_VER = '20260428c'  # bump on each deploy to bust browser cache
+
 @app.route('/')
 def index():
     resp = send_from_directory('.', 'dashboard_hidrometeo.html')
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    resp.headers['ETag'] = _DEPLOY_VER
     return resp
 
 

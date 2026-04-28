@@ -1721,13 +1721,11 @@ function fetchAndShowLayer(layer, name) {
     if (name && features.length) {
       const tgtNorm = normStr(name);
 
-      // Para departamentos: usar siempre filtro por atributo dept (más rápido y fiable
-      // que turf, evita problemas de winding-order CW/CCW en shapefiles ESRI).
+      // Para departamentos: las estaciones ya fueron filtradas sincrónicamente
+      // en selectItem. NO tocar CURRENT_VISIBLE_STATIONS aquí para no borrarlas.
       if (layer === 'departamentos') {
-        const resultado = STATIONS_POOL.filter(s => normStr(s.dept || '') === tgtNorm);
-        CURRENT_VISIBLE_STATIONS = resultado;
-        plotStationsOnMap(resultado);
-        try { _renderTableOnly(); } catch(e){}
+        // Solo bringToFront para que los marcadores queden sobre el polígono
+        try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
       } else {
       // Para cuencas y sectores: usar turf (no tienen campo de atributo directo)
 
