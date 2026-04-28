@@ -612,9 +612,7 @@ function selectItem(el, name, type, peers) {
     try { const tb = document.getElementById('tableBody'); if(tb) tb.innerHTML = _buildTableRows(deptResult); } catch(e){}
     try { updateEstCountBadge(); } catch(e){}
     try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
-    // Dibujar polígono del dpto sin afectar estaciones: llamamos fetchAndShowLayer
-    // PERO sobrescribimos selectAreaType para que no toque stations dentro de ella
-    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name, /*stationsAlreadySet=*/true);
+    // NO llamar fetchAndShowLayer para dept — el polígono async sobreescribe las estaciones
   } else if (type === 'cuenca') {
     // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
     // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
