@@ -1438,17 +1438,19 @@ function initLeaflet() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
   }).addTo(leafletMap);
 
-  // ── HILLSHADE sobre el satélite (blend multiply = oscurece zonas en sombra) ──
+  // ── HILLSHADE sobre el satélite (blend multiply) ──
+  // Crear pane dedicado y aplicar multiply directamente al elemento DOM
+  leafletMap.createPane('hillshadePane');
+  const hillPaneEl = leafletMap.getPane('hillshadePane');
+  hillPaneEl.style.zIndex    = 300;           // entre tilePane(200) y overlayPane(400)
+  hillPaneEl.style.mixBlendMode = 'multiply';
+  hillPaneEl.style.opacity   = '0.7';
+  hillPaneEl.style.pointerEvents = 'none';
+
   window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
     opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18,
-    attribution: 'Hillshade DEM', pane: 'overlayPane'
+    attribution: '', pane: 'hillshadePane'
   }).addTo(leafletMap);
-  // Aplicar mix-blend-mode:multiply al contenedor del layer
-  window._hillLayer.on('add', function() {
-    const el = this.getContainer ? this.getContainer() : null;
-    if (el) { el.style.mixBlendMode = 'multiply'; el.style.opacity = '0.7'; }
-  });
-  window._hillLayer.fire('add');
 
   // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
   try {
@@ -1464,35 +1466,26 @@ function initLeaflet() {
   stationsLayer = L.layerGroup().addTo(leafletMap);
 }
 
-function _applyHillBlend(layer) {
-  // Espera a que el container exista y aplica multiply
-  setTimeout(() => {
-    const el = layer.getContainer ? layer.getContainer() : null;
-    if (el) { el.style.mixBlendMode = 'multiply'; }
-  }, 50);
-}
-
 function updateHillshade() {
   const gamma   = parseFloat(document.getElementById('hillGamma').value);
   const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
   document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
   document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
-  if (!window._hillLayer) return;
-  if (leafletMap) leafletMap.removeLayer(window._hillLayer);
+  // Actualizar opacidad del pane (no del layer)
+  const pane = leafletMap && leafletMap.getPane('hillshadePane');
+  if (pane) pane.style.opacity = opacity;
+  // Recargar tiles con nuevo gamma
+  if (!window._hillLayer || !leafletMap) return;
+  leafletMap.removeLayer(window._hillLayer);
   window._hillLayer = L.tileLayer(
     `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
-    { opacity: opacity, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
-  );
-  if (document.getElementById('hillshadeToggle').checked) {
-    window._hillLayer.addTo(leafletMap);
-    _applyHillBlend(window._hillLayer);
-  }
+    { opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane' }
+  ).addTo(leafletMap);
 }
 
 function toggleHillshade(visible) {
-  if (!window._hillLayer || !leafletMap) return;
-  if (visible) { window._hillLayer.addTo(leafletMap); _applyHillBlend(window._hillLayer); }
-  else leafletMap.removeLayer(window._hillLayer);
+  const pane = leafletMap && leafletMap.getPane('hillshadePane');
+  if (pane) pane.style.display = visible ? '' : 'none';
 }
 
 // GEOJSON cache helper

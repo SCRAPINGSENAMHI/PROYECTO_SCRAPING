@@ -696,24 +696,20 @@ function initMap() {
   }).addTo(map);
 
   // ── HILLSHADE sobre el satélite (blend multiply) ──
+  map.createPane('hillshadePane');
+  const hillPaneEl = map.getPane('hillshadePane');
+  hillPaneEl.style.zIndex       = 300;
+  hillPaneEl.style.mixBlendMode = 'multiply';
+  hillPaneEl.style.opacity      = '0.7';
+  hillPaneEl.style.pointerEvents = 'none';
+
   window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
-    opacity: 0.7, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'overlayPane'
+    opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane'
   }).addTo(map);
-  setTimeout(() => {
-    const el = window._hillLayer.getContainer ? window._hillLayer.getContainer() : null;
-    if (el) el.style.mixBlendMode = 'multiply';
-  }, 100);
 
   renderMapMarkers();
   buildDeptChips();
   loadDeptGeo();
-}
-
-function _applyHillBlend(layer) {
-  setTimeout(() => {
-    const el = layer.getContainer ? layer.getContainer() : null;
-    if (el) el.style.mixBlendMode = 'multiply';
-  }, 50);
 }
 
 function updateHillshade() {
@@ -721,22 +717,19 @@ function updateHillshade() {
   const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
   document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
   document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
+  const pane = map && map.getPane('hillshadePane');
+  if (pane) pane.style.opacity = opacity;
   if (!window._hillLayer || !map) return;
   map.removeLayer(window._hillLayer);
   window._hillLayer = L.tileLayer(
     `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
-    { opacity: opacity, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
-  );
-  if (document.getElementById('hillshadeToggle').checked) {
-    window._hillLayer.addTo(map);
-    _applyHillBlend(window._hillLayer);
-  }
+    { opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane' }
+  ).addTo(map);
 }
 
 function toggleHillshade(visible) {
-  if (!window._hillLayer || !map) return;
-  if (visible) { window._hillLayer.addTo(map); _applyHillBlend(window._hillLayer); }
-  else map.removeLayer(window._hillLayer);
+  const pane = map && map.getPane('hillshadePane');
+  if (pane) pane.style.display = visible ? '' : 'none';
 }
 
 function renderMapMarkers() {
