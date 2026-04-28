@@ -392,9 +392,9 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="width:52px;color:#6b8aaa">Opacidad</span>
-          <input type="range" id="hillOpacity" min="0" max="255" step="5" value="160"
+          <input type="range" id="hillOpacity" min="0" max="100" step="5" value="70"
             oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-          <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">63%</span>
+          <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">70%</span>
         </div>
       </div>
     </div>
@@ -695,35 +695,47 @@ function initMap() {
     maxZoom: 18
   }).addTo(map);
 
-  // ── HILLSHADE sobre el satélite ──
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=160', {
-    opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'overlayPane'
+  // ── HILLSHADE sobre el satélite (blend multiply) ──
+  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
+    opacity: 0.7, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'overlayPane'
   }).addTo(map);
+  setTimeout(() => {
+    const el = window._hillLayer.getContainer ? window._hillLayer.getContainer() : null;
+    if (el) el.style.mixBlendMode = 'multiply';
+  }, 100);
 
   renderMapMarkers();
   buildDeptChips();
   loadDeptGeo();
 }
 
+function _applyHillBlend(layer) {
+  setTimeout(() => {
+    const el = layer.getContainer ? layer.getContainer() : null;
+    if (el) el.style.mixBlendMode = 'multiply';
+  }, 50);
+}
+
 function updateHillshade() {
   const gamma   = parseFloat(document.getElementById('hillGamma').value);
-  const opacity = parseInt(document.getElementById('hillOpacity').value);
+  const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
   document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
-  document.getElementById('hillOpacityVal').textContent = Math.round(opacity/255*100) + '%';
+  document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
   if (!window._hillLayer || !map) return;
   map.removeLayer(window._hillLayer);
   window._hillLayer = L.tileLayer(
-    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=${opacity}`,
-    { opacity:1, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
+    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
+    { opacity: opacity, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
   );
   if (document.getElementById('hillshadeToggle').checked) {
     window._hillLayer.addTo(map);
+    _applyHillBlend(window._hillLayer);
   }
 }
 
 function toggleHillshade(visible) {
   if (!window._hillLayer || !map) return;
-  if (visible) window._hillLayer.addTo(map);
+  if (visible) { window._hillLayer.addTo(map); _applyHillBlend(window._hillLayer); }
   else map.removeLayer(window._hillLayer);
 }
 

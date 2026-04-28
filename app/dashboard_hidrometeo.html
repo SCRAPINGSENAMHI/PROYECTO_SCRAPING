@@ -243,9 +243,9 @@ function doLogin(){
               </div>
               <div style="display:flex;align-items:center;gap:6px">
                 <span style="width:52px;color:#6b8aaa">Opacidad</span>
-                <input type="range" id="hillOpacity" min="0" max="255" step="5" value="160"
+                <input type="range" id="hillOpacity" min="0" max="100" step="5" value="70"
                   oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-                <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">63%</span>
+                <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">70%</span>
               </div>
             </div>
           </div>
@@ -1438,11 +1438,17 @@ function initLeaflet() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
   }).addTo(leafletMap);
 
-  // ── HILLSHADE sobre el satélite ──
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=160', {
+  // ── HILLSHADE sobre el satélite (blend multiply = oscurece zonas en sombra) ──
+  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.6&opacity=255', {
     opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18,
     attribution: 'Hillshade DEM', pane: 'overlayPane'
   }).addTo(leafletMap);
+  // Aplicar mix-blend-mode:multiply al contenedor del layer
+  window._hillLayer.on('add', function() {
+    const el = this.getContainer ? this.getContainer() : null;
+    if (el) { el.style.mixBlendMode = 'multiply'; el.style.opacity = '0.7'; }
+  });
+  window._hillLayer.fire('add');
 
   // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
   try {
@@ -1458,25 +1464,34 @@ function initLeaflet() {
   stationsLayer = L.layerGroup().addTo(leafletMap);
 }
 
+function _applyHillBlend(layer) {
+  // Espera a que el container exista y aplica multiply
+  setTimeout(() => {
+    const el = layer.getContainer ? layer.getContainer() : null;
+    if (el) { el.style.mixBlendMode = 'multiply'; }
+  }, 50);
+}
+
 function updateHillshade() {
   const gamma   = parseFloat(document.getElementById('hillGamma').value);
-  const opacity = parseInt(document.getElementById('hillOpacity').value);
+  const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
   document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
-  document.getElementById('hillOpacityVal').textContent = Math.round(opacity/255*100) + '%';
+  document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
   if (!window._hillLayer) return;
   if (leafletMap) leafletMap.removeLayer(window._hillLayer);
   window._hillLayer = L.tileLayer(
-    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=${opacity}`,
-    { opacity:1, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
+    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
+    { opacity: opacity, tileSize:256, minZoom:3, maxZoom:18, pane:'overlayPane' }
   );
   if (document.getElementById('hillshadeToggle').checked) {
     window._hillLayer.addTo(leafletMap);
+    _applyHillBlend(window._hillLayer);
   }
 }
 
 function toggleHillshade(visible) {
   if (!window._hillLayer || !leafletMap) return;
-  if (visible) window._hillLayer.addTo(leafletMap);
+  if (visible) { window._hillLayer.addTo(leafletMap); _applyHillBlend(window._hillLayer); }
   else leafletMap.removeLayer(window._hillLayer);
 }
 
