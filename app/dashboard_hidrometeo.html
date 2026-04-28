@@ -909,6 +909,23 @@ function _renderTableOnly() {
 function renderTable(area) {
   const tbody = document.getElementById('tableBody');
   const norm = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim(); } catch(e) { return String(x||'').toLowerCase().trim(); } };
+  // Para departamentos: SIEMPRE filtrar por atributo dept (no depender de CURRENT_VISIBLE_STATIONS
+  // que podría tener datos de un departamento anterior y causar resultados incorrectos).
+  if (selectedAreaType === 'dept' && area && area !== 'TODOS' && area !== 'TODOS LOS DEPARTAMENTOS') {
+    const tgt = norm(area);
+    const resultado = STATIONS_POOL.filter(s => s && s.dept && norm(s.dept) === tgt);
+    const tbody2 = document.getElementById('tableBody');
+    if (tbody2) tbody2.innerHTML = _buildTableRows(resultado);
+    try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(resultado); } catch(e){}
+    CURRENT_VISIBLE_STATIONS = resultado;
+    updateEstCountBadge();
+    try {
+      const areaLabel = area;
+      document.getElementById('bc-area').textContent = areaLabel;
+    } catch(e){}
+    return;
+  }
+
   // Use spatially filtered stations if available (set by fetchAndShowLayer)
   let filtered = (CURRENT_VISIBLE_STATIONS !== null) ? CURRENT_VISIBLE_STATIONS.slice() : STATIONS_POOL.slice();
   // Only apply name-based filtering when we don't have a spatial override

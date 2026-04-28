@@ -100,7 +100,10 @@ def _find_data_dir():
 
 @app.route('/')
 def index():
-    return send_from_directory('.', 'dashboard_hidrometeo.html')
+    resp = send_from_directory('.', 'dashboard_hidrometeo.html')
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 
 @app.route('/historico')
