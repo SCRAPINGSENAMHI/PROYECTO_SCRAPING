@@ -31,6 +31,8 @@ six==1.16.0
 
 # --- Geoespacial ---
 # GDAL: ver nota arriba (se instala en Dockerfile)
+rasterio==1.5.0
+Pillow==12.2.0
 geopandas==0.14.0
 fiona==1.9.4
 shapely==2.1.0
