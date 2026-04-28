@@ -866,11 +866,17 @@ def api_representatividad():
         return ''.join(c for c in s if _ud.category(c) != 'Mn')
 
     def _load_index():
+        """Carga _index.json (lista) y devuelve dict keyed por nombre normalizado."""
         idx_path = base / '_index.json'
         if idx_path.exists():
             try:
                 with open(idx_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    entries = json.load(f)
+                # entries es una lista de dicts; construir dict por nombre normalizado
+                if isinstance(entries, list):
+                    return {_norm(e['nombre']): e for e in entries if 'nombre' in e}
+                # fallback por si algún día se cambia el formato
+                return entries
             except Exception:
                 pass
         return {}
