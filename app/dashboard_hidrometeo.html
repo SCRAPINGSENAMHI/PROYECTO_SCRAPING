@@ -603,17 +603,18 @@ function selectItem(el, name, type, peers) {
   selectedAreaType = type;
   // Mostrar la capa correspondiente en el mapa si existe
   if (type === 'dept') {
-    // Filtrar estaciones INMEDIATAMENTE por atributo dept (sin esperar GeoJSON async)
     const normD = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); } catch(e){ return String(x||'').toLowerCase().trim(); } };
+    // Filtrar estaciones por atributo dept — NO usar fetchAndShowLayer para dept
+    // (fetchAndShowLayer es async y puede sobreescribir CURRENT_VISIBLE_STATIONS)
     const deptResult = STATIONS_POOL.filter(s => s && s.dept && normD(s.dept) === normD(name));
     CURRENT_VISIBLE_STATIONS = deptResult;
-    try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(deptResult); } catch(e){}
+    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(deptResult);
     try { const tb = document.getElementById('tableBody'); if(tb) tb.innerHTML = _buildTableRows(deptResult); } catch(e){}
     try { updateEstCountBadge(); } catch(e){}
-    // Mostrar polígono del departamento en el mapa (solo visual, sin afectar estaciones)
-    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
-    // Limpiar el sublist de cuencas (no mezclar filtros)
     try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
+    // Dibujar polígono del dpto sin afectar estaciones: llamamos fetchAndShowLayer
+    // PERO sobrescribimos selectAreaType para que no toque stations dentro de ella
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name, /*stationsAlreadySet=*/true);
   } else if (type === 'cuenca') {
     // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
     // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
@@ -1459,7 +1460,7 @@ function initLeaflet() {
 
 // GEOJSON cache helper
 const GEO_CACHE = {};
-const _GEO_VER = '20260428d'; // bump this to bust browser GEO_CACHE when GeoJSON logic changes
+const _GEO_VER = '20260428e'; // bump this to bust browser GEO_CACHE when GeoJSON logic changes
 function loadGeo(layer){
   if (GEO_CACHE[layer]) return Promise.resolve(GEO_CACHE[layer]);
   return fetch('/api/geojson?layer='+encodeURIComponent(layer)+'&v='+_GEO_VER).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
@@ -1633,7 +1634,7 @@ function clearAllOverlays() {
 // Contador de versión para cancelar operaciones obsoletas al hacer clic rápido
 let _layerVersion = 0;
 
-function fetchAndShowLayer(layer, name) {
+function fetchAndShowLayer(layer, name, stationsAlreadySet) {
   if (!leafletMap) initLeaflet();
 
   // Incrementar versión: cualquier operación async con versión anterior se descarta
@@ -1718,14 +1719,12 @@ function fetchAndShowLayer(layer, name) {
     try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
 
     // Filtrar estaciones si se seleccionó un área específica
-    if (name && features.length) {
+    // Si stationsAlreadySet=true (dept), NO tocar estaciones en absoluto
+    if (stationsAlreadySet) {
+      try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
+    } else if (name && features.length) {
       const tgtNorm = normStr(name);
-
-      // Para departamentos: las estaciones ya fueron filtradas sincrónicamente
-      // en selectItem. NO tocar CURRENT_VISIBLE_STATIONS aquí para no borrarlas.
-      if (layer === 'departamentos') {
-        // Solo bringToFront para que los marcadores queden sobre el polígono
-        try { if (stationsLayer && stationsLayer.bringToFront) stationsLayer.bringToFront(); } catch(e){}
+      if (false) { // placeholder — dept ya no llega aquí
       } else {
       // Para cuencas y sectores: usar turf (no tienen campo de atributo directo)
 
@@ -1778,8 +1777,8 @@ function fetchAndShowLayer(layer, name) {
         plotStationsOnMap(resultado);
         try { _renderTableOnly(); } catch(e){}
       }, 0);
-      } // end else (no departamentos)
-    } else {
+      } // end else placeholder
+    } else if (!stationsAlreadySet) {
       CURRENT_VISIBLE_STATIONS = null;
       plotStationsOnMap(STATIONS_POOL);
       _renderTableOnly();
