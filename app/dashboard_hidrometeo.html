@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Monitor Hidrometeorológico</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <!-- Leaflet CSS -->
@@ -226,28 +229,6 @@ function doLogin(){
           <div id="peru-map-wrap" style="position:relative;flex:1;min-height:420px;">
             <div id="leafletMap" style="width:100%;height:100%;display:block;border-radius:6px;overflow:hidden;isolation:isolate"></div>
             <div id="markerCountBadge" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.5);color:#fff;padding:6px 8px;border-radius:6px;font-weight:700;z-index:999">0 puntos</div>
-            <!-- Control Hillshade -->
-            <div id="hillshadeControl" style="position:absolute;bottom:10px;left:10px;z-index:999;background:rgba(6,15,10,0.88);border:1px solid rgba(95,207,141,0.3);border-radius:10px;padding:8px 12px;font-family:'Inter',sans-serif;font-size:0.72rem;color:#a0bfaa;min-width:160px;backdrop-filter:blur(6px)">
-              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <span style="font-weight:700;color:#5fcf8d;letter-spacing:0.05em;text-transform:uppercase;font-size:0.65rem">Hillshade</span>
-                <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-                  <input type="checkbox" id="hillshadeToggle" checked onchange="toggleHillshade(this.checked)" style="accent-color:#5fcf8d;cursor:pointer">
-                  <span style="font-size:0.68rem;color:#6b8aaa">Visible</span>
-                </label>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-                <span style="width:52px;color:#6b8aaa">Gamma</span>
-                <input type="range" id="hillGamma" min="0.1" max="2.0" step="0.05" value="0.5"
-                  oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-                <span id="hillGammaVal" style="width:28px;text-align:right;color:#e2f0e8">0.5</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <span style="width:52px;color:#6b8aaa">Opacidad</span>
-                <input type="range" id="hillOpacity" min="0" max="100" step="5" value="70"
-                  oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-                <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">70%</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -622,11 +603,17 @@ function selectItem(el, name, type, peers) {
   selectedAreaType = type;
   // Mostrar la capa correspondiente en el mapa si existe
   if (type === 'dept') {
+    // Filtrar estaciones INMEDIATAMENTE por atributo dept (sin esperar GeoJSON async)
+    const normD = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); } catch(e){ return String(x||'').toLowerCase().trim(); } };
+    const deptResult = STATIONS_POOL.filter(s => s && s.dept && normD(s.dept) === normD(name));
+    CURRENT_VISIBLE_STATIONS = deptResult;
+    try { if (typeof plotStationsOnMap === 'function') plotStationsOnMap(deptResult); } catch(e){}
+    try { const tb = document.getElementById('tableBody'); if(tb) tb.innerHTML = _buildTableRows(deptResult); } catch(e){}
+    try { updateEstCountBadge(); } catch(e){}
+    // Mostrar polígono del departamento en el mapa (solo visual, sin afectar estaciones)
     if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
     // Limpiar el sublist de cuencas (no mezclar filtros)
     try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
-    // Para dept el filtro es por nombre (sin GeoJSON), renderizar de inmediato
-    try { renderTable(selectedArea); } catch(e){ console.warn('renderTable error', e); }
   } else if (type === 'cuenca') {
     // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
     // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
@@ -1455,20 +1442,6 @@ function initLeaflet() {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
   }).addTo(leafletMap);
 
-  // ── HILLSHADE sobre el satélite (blend multiply) ──
-  // Crear pane dedicado y aplicar multiply directamente al elemento DOM
-  leafletMap.createPane('hillshadePane');
-  const hillPaneEl = leafletMap.getPane('hillshadePane');
-  hillPaneEl.style.zIndex    = 300;           // entre tilePane(200) y overlayPane(400)
-  hillPaneEl.style.mixBlendMode = 'multiply';
-  hillPaneEl.style.opacity   = '0.7';
-  hillPaneEl.style.pointerEvents = 'none';
-
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.5&opacity=255', {
-    opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18,
-    attribution: '', pane: 'hillshadePane'
-  }).addTo(leafletMap);
-
   // Crear pane específica para estaciones para forzar orden de dibujo encima de polígonos
   try {
     if (!leafletMap.getPane('stationsPane')) {
@@ -1483,27 +1456,6 @@ function initLeaflet() {
   stationsLayer = L.layerGroup().addTo(leafletMap);
 }
 
-function updateHillshade() {
-  const gamma   = parseFloat(document.getElementById('hillGamma').value);
-  const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
-  document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
-  document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
-  // Actualizar opacidad del pane (no del layer)
-  const pane = leafletMap && leafletMap.getPane('hillshadePane');
-  if (pane) pane.style.opacity = opacity;
-  // Recargar tiles con nuevo gamma
-  if (!window._hillLayer || !leafletMap) return;
-  leafletMap.removeLayer(window._hillLayer);
-  window._hillLayer = L.tileLayer(
-    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
-    { opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane' }
-  ).addTo(leafletMap);
-}
-
-function toggleHillshade(visible) {
-  const pane = leafletMap && leafletMap.getPane('hillshadePane');
-  if (pane) pane.style.display = visible ? '' : 'none';
-}
 
 // GEOJSON cache helper
 const GEO_CACHE = {};
