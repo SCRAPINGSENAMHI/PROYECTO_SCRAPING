@@ -612,7 +612,36 @@ def shapefile_to_geojson(shp_path, filter_name=None):
                 start, end = parts[i], parts[i+1]
                 ring = [[pt[0], pt[1]] for pt in sh.points[start:end]]
                 rings.append(ring)
-            geom = {"type": "Polygon", "coordinates": rings}
+            # Detect outer vs inner rings by signed area (shoelace formula).
+            # ESRI: outer rings are CW (negative signed area), holes are CCW.
+            # GeoJSON: outer rings CCW, holes CW — but turf handles both.
+            # Key fix: multiple outer rings → MultiPolygon (not nested holes).
+            def _signed_area(ring):
+                n = len(ring)
+                if n < 3:
+                    return 0
+                a = sum((ring[i][0] * ring[(i+1) % n][1] - ring[(i+1) % n][0] * ring[i][1])
+                        for i in range(n))
+                return a / 2.0
+            if len(rings) == 1:
+                geom = {"type": "Polygon", "coordinates": rings}
+            else:
+                # Classify rings: ESRI outer rings have CW winding (signed_area < 0)
+                # Build polygons: each outer ring starts a new polygon; holes follow
+                polygons = []
+                current = None
+                for ring in rings:
+                    sa = _signed_area(ring)
+                    is_outer = sa < 0  # CW = outer in ESRI
+                    if is_outer or current is None:
+                        current = [ring]
+                        polygons.append(current)
+                    else:
+                        current.append(ring)  # hole
+                if len(polygons) == 1:
+                    geom = {"type": "Polygon", "coordinates": polygons[0]}
+                else:
+                    geom = {"type": "MultiPolygon", "coordinates": polygons}
         elif sh.shapeType in (shapefile.POINT, shapefile.POINTZ, shapefile.POINTM):
             geom = {"type": "Point", "coordinates": [sh.points[0][0], sh.points[0][1]]}
         elif sh.shapeType in (shapefile.MULTIPATCH,):
