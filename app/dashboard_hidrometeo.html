@@ -1490,9 +1490,10 @@ function toggleHillshade(visible) {
 
 // GEOJSON cache helper
 const GEO_CACHE = {};
+const _GEO_VER = '20260428b'; // bump this to bust browser GEO_CACHE when GeoJSON logic changes
 function loadGeo(layer){
   if (GEO_CACHE[layer]) return Promise.resolve(GEO_CACHE[layer]);
-  return fetch('/api/geojson?layer='+encodeURIComponent(layer)).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
+  return fetch('/api/geojson?layer='+encodeURIComponent(layer)+'&v='+_GEO_VER).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
 }
 
 // ── Bounding-box helpers para pre-filtrado rápido (evita operaciones Turf costosas) ──
@@ -1749,6 +1750,18 @@ function fetchAndShowLayer(layer, name) {
 
     // Filtrar estaciones si se seleccionó un área específica
     if (name && features.length) {
+      const tgtNorm = normStr(name);
+
+      // Para departamentos: usar siempre filtro por atributo dept (más rápido y fiable
+      // que turf, evita problemas de winding-order CW/CCW en shapefiles ESRI).
+      if (layer === 'departamentos') {
+        const resultado = STATIONS_POOL.filter(s => normStr(s.dept || '') === tgtNorm);
+        CURRENT_VISIBLE_STATIONS = resultado;
+        plotStationsOnMap(resultado);
+        try { _renderTableOnly(); } catch(e){}
+      } else {
+      // Para cuencas y sectores: usar turf (no tienen campo de atributo directo)
+
       // Calcular bbox total del área para pre-filtrar rápido
       const areaBbox = features.reduce((bb, f) => {
         const fb = f._bbox;
@@ -1780,20 +1793,15 @@ function fetchAndShowLayer(layer, name) {
         });
         if (myVersion !== _layerVersion) return;
 
-        // Fallback: si turf devuelve 0 estaciones (problema de winding-order, bbox incorrecto,
-        // o topología compleja del GeoJSON), usar filtro por atributo dept/cuenca
+        // Fallback: si turf devuelve 0 estaciones
         let resultado = inside;
         if (inside.length === 0) {
           console.warn('fetchAndShowLayer: turf=0, usando fallback por atributo para "' + name + '"');
-          const tgtNorm = normStr(name);
-          if (layer === 'departamentos') {
-            resultado = STATIONS_POOL.filter(s => normStr(s.dept || '') === tgtNorm);
-          } else if (layer === 'cuencas') {
+          if (layer === 'cuencas') {
             resultado = STATIONS_POOL.filter(s => normStr(s.cuenca || '') === tgtNorm ||
                                                    normStr(s.cuenca || '').includes(tgtNorm) ||
                                                    tgtNorm.includes(normStr(s.cuenca || '')));
           } else {
-            // Para otras capas: mostrar candidatos del bbox si hay menos de 200
             resultado = candidatosStn.length <= 200 ? candidatosStn : inside;
           }
           console.warn('fetchAndShowLayer: fallback resultado:', resultado.length, 'estaciones');
@@ -1803,6 +1811,7 @@ function fetchAndShowLayer(layer, name) {
         plotStationsOnMap(resultado);
         try { _renderTableOnly(); } catch(e){}
       }, 0);
+      } // end else (no departamentos)
     } else {
       CURRENT_VISIBLE_STATIONS = null;
       plotStationsOnMap(STATIONS_POOL);
