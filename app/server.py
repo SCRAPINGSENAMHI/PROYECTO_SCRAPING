@@ -619,32 +619,35 @@ def shapefile_to_geojson(shp_path, filter_name=None):
                 start, end = parts[i], parts[i+1]
                 ring = [[pt[0], pt[1]] for pt in sh.points[start:end]]
                 rings.append(ring)
-            # Detect outer vs inner rings by signed area (shoelace formula).
-            # ESRI: outer rings are CW (negative signed area), holes are CCW.
-            # GeoJSON: outer rings CCW, holes CW — but turf handles both.
-            # Key fix: multiple outer rings → MultiPolygon (not nested holes).
+
             def _signed_area(ring):
                 n = len(ring)
-                if n < 3:
-                    return 0
-                a = sum((ring[i][0] * ring[(i+1) % n][1] - ring[(i+1) % n][0] * ring[i][1])
-                        for i in range(n))
-                return a / 2.0
+                if n < 3: return 0
+                return sum((ring[i][0]*ring[(i+1)%n][1] - ring[(i+1)%n][0]*ring[i][1])
+                           for i in range(n)) / 2.0
+
+            def _ensure_ccw(ring):
+                """GeoJSON RFC 7946: exterior rings must be CCW (positive signed area)."""
+                return ring if _signed_area(ring) > 0 else ring[::-1]
+
+            def _ensure_cw(ring):
+                """GeoJSON RFC 7946: holes must be CW (negative signed area)."""
+                return ring if _signed_area(ring) < 0 else ring[::-1]
+
             if len(rings) == 1:
-                geom = {"type": "Polygon", "coordinates": rings}
+                geom = {"type": "Polygon", "coordinates": [_ensure_ccw(rings[0])]}
             else:
-                # Classify rings: ESRI outer rings have CW winding (signed_area < 0)
-                # Build polygons: each outer ring starts a new polygon; holes follow
+                # ESRI: outer rings CW (sa < 0), holes CCW (sa > 0)
+                # Multiple outer rings → MultiPolygon
                 polygons = []
                 current = None
                 for ring in rings:
-                    sa = _signed_area(ring)
-                    is_outer = sa < 0  # CW = outer in ESRI
+                    is_outer = _signed_area(ring) < 0  # CW = outer in ESRI
                     if is_outer or current is None:
-                        current = [ring]
+                        current = [_ensure_ccw(ring)]  # reverse to CCW for GeoJSON
                         polygons.append(current)
                     else:
-                        current.append(ring)  # hole
+                        current.append(_ensure_cw(ring))  # reverse to CW for GeoJSON holes
                 if len(polygons) == 1:
                     geom = {"type": "Polygon", "coordinates": polygons[0]}
                 else:

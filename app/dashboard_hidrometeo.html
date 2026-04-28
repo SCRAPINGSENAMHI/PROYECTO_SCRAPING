@@ -1459,7 +1459,7 @@ function initLeaflet() {
 
 // GEOJSON cache helper
 const GEO_CACHE = {};
-const _GEO_VER = '20260428b'; // bump this to bust browser GEO_CACHE when GeoJSON logic changes
+const _GEO_VER = '20260428d'; // bump this to bust browser GEO_CACHE when GeoJSON logic changes
 function loadGeo(layer){
   if (GEO_CACHE[layer]) return Promise.resolve(GEO_CACHE[layer]);
   return fetch('/api/geojson?layer='+encodeURIComponent(layer)+'&v='+_GEO_VER).then(r=>r.json()).then(g=>{ GEO_CACHE[layer]=g; return g; });
