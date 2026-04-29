@@ -353,22 +353,21 @@ def api_stations():
     df = None
     
     if use_local:
-        # PRIORIDAD 1: stations_hist_portal.csv (tiene 30 estaciones de Puno + coordenadas validadas)
-        hist_csv = base / 'stations_hist_portal.csv'
-        if hist_csv.exists():
-            try:
-                df = pd.read_csv(hist_csv)
-                # Renormalizar columnas para compatibilidad
-                if 'lat' not in df.columns and 'latitud' in df.columns.str.lower().values:
-                    for c in df.columns:
-                        if str(c).lower() == 'latitud':
-                            df = df.rename(columns={c: 'lat'})
-                        elif str(c).lower() == 'longitud':
-                            df = df.rename(columns={c: 'lon'})
-                print(f"api_stations: cargada desde CSV histórico: {hist_csv.name} ({len(df)} records)")
-            except Exception as e:
-                print(f"api_stations: fallo leyendo CSV histórico: {e}")
-                df = None
+        # PRIORIDAD 1: Maestra_de_estaciones_Senamhi.xlsx (tiene 979 estaciones, datos no históricos)
+        maestra_candidates = [
+            base / 'Maestra_de_estaciones_Senamhi.xlsx',
+            base / 'Estaciones_Meteorológicas_Peru.xlsx'
+        ]
+        for cand in maestra_candidates:
+            if cand.exists():
+                try:
+                    df = pd.read_excel(cand)
+                    print(f"api_stations: cargada maestra: {cand.name} ({len(df)} records)")
+                    break
+                except Exception as e:
+                    print(f"api_stations: fallo leyendo {cand.name}: {e}")
+                    df = None
+                    continue
 
         # PRIORIDAD 2: Usar módulo scraper si está disponible
         if df is None and use_local:
@@ -380,23 +379,40 @@ def api_stations():
             except Exception:
                 df = None
 
-        # PRIORIDAD 3: Maestra Excel con fallbacks
+        # PRIORIDAD 3: CSV histórico como fallback (datos históricos, 293 estaciones)
+        if df is None:
+            hist_csv = base / 'stations_hist_portal.csv'
+            if hist_csv.exists():
+                try:
+                    df = pd.read_csv(hist_csv)
+                    # Renormalizar columnas para compatibilidad
+                    if 'lat' not in df.columns and 'latitud' in df.columns.str.lower().values:
+                        for c in df.columns:
+                            if str(c).lower() == 'latitud':
+                                df = df.rename(columns={c: 'lat'})
+                            elif str(c).lower() == 'longitud':
+                                df = df.rename(columns={c: 'lon'})
+                    print(f"api_stations: cargada desde CSV histórico (fallback): {hist_csv.name} ({len(df)} records)")
+                except Exception as e:
+                    print(f"api_stations: fallo leyendo CSV histórico: {e}")
+                    df = None
+
+        # PRIORIDAD 4: Otros fallbacks de Excel con header
         if df is None:
             maestra_candidates = [
-                base / 'Maestra_de_estaciones_Senamhi.xlsx',
                 base / 'Estaciones_Meteorológicas_Peru.xlsx'
             ]
             for cand in maestra_candidates:
                 if cand.exists():
                     try:
                         df = pd.read_excel(cand)
-                        print(f"api_stations: cargada maestra local: {cand}")
+                        print(f"api_stations: cargada fallback Excel: {cand.name}")
                         break
                     except Exception as e:
-                        print(f"api_stations: fallo leyendo {cand}: {e}")
+                        print(f"api_stations: fallo leyendo {cand.name}: {e}")
                         df = None
                         continue
-            # fallback: try direct read of known files (robust to headerless files)
+            # fallback: try direct read of files with various header options
             if df is None:
                 maestra_candidates = [
                     base / 'Estaciones_Meteorológicas_Peru.xlsx',
