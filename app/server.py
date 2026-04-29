@@ -414,10 +414,10 @@ def api_stations():
                                 break
                             except Exception:
                                 df = None
-        else:
-            # when not using local, call scraper remote list
-            if scraper is not None:
-                df = scraper.get_stations(use_local=False)
+    elif not use_local:
+        # when not using local, call scraper remote list
+        if scraper is not None:
+            df = scraper.get_stations(use_local=False)
 
     if df is None:
         return jsonify([])
