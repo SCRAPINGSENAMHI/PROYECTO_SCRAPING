@@ -242,7 +242,7 @@ function doLogin(){
                 <button onclick="cerrarReprPanel()" title="Cerrar" style="background:none;border:none;color:#5fcf8d;cursor:pointer;font-size:1rem;padding:2px 6px">&#x2715;</button>
               </div>
             </div>
-            <div id="repr-content" style="display:block"><div class="repr-spinner">Selecciona una estacion en el mapa</div></div>
+            <div id="repr-content" style="display:block;max-height:100vh;overflow:hidden;transition:max-height 0.3s ease"><div class="repr-spinner">Selecciona una estacion en el mapa</div></div>
           </div>
         </div>
 
@@ -299,7 +299,7 @@ function doLogin(){
     <div id="dlProgressBar" style="height:100%;background:linear-gradient(90deg,#2f6b46,#5fcf8d);width:5%;transition:width 0.5s ease;border-radius:2px"></div>
   </div>
   <!-- ── CALENDARIO DE DATOS ── -->
-  <div id="dlCalendarWrap" style="padding:10px 14px 6px;border-bottom:1px solid rgba(255,255,255,0.05)">
+  <div id="dlCalendarWrap" style="padding:10px 14px 6px;border-bottom:1px solid rgba(255,255,255,0.05);transition:max-height 0.3s ease,padding 0.3s ease;max-height:auto">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
       <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.07em;color:#5fcf8d;font-weight:700">Calendario de datos</span>
       <div style="display:flex;align-items:center;gap:8px">
@@ -314,7 +314,7 @@ function doLogin(){
       </div>
     </div>
     <!-- encabezado meses -->
-    <div id="dlCalendarHeader" style="display:grid;grid-template-columns:30px repeat(12,1fr);gap:2px;margin-bottom:2px">
+    <div id="dlCalendarHeader" style="display:grid;grid-template-columns:30px repeat(12,1fr);gap:2px;margin-bottom:2px;max-height:30px;overflow:hidden;transition:max-height 0.3s ease">
       <div></div>
       <div style="text-align:center;font-size:0.58rem;color:#4a6a55">E</div>
       <div style="text-align:center;font-size:0.58rem;color:#4a6a55">F</div>
@@ -329,7 +329,7 @@ function doLogin(){
       <div style="text-align:center;font-size:0.58rem;color:#4a6a55">N</div>
       <div style="text-align:center;font-size:0.58rem;color:#4a6a55">D</div>
     </div>
-    <div id="dlCalendarGrid" style="display:flex;flex-direction:column;gap:2px;max-height:110px;overflow-y:auto"></div>
+    <div id="dlCalendarGrid" style="display:flex;flex-direction:column;gap:2px;max-height:110px;overflow-y:auto;overflow-x:hidden;transition:max-height 0.3s ease"></div>
   </div>
   <!-- ── LOG TERMINAL (colapsable) ── -->
   <div id="dlProgressLog" style="padding:8px 14px;max-height:80px;overflow-y:auto;font-size:0.68rem;line-height:1.6;color:#5a8070;font-family:'Courier New',monospace;word-break:break-all;"></div>
@@ -2025,21 +2025,38 @@ function cerrarReprPanel() {
 }
 
 function toggleReprPanel() {
-  const panel = document.getElementById('repr-panel');
   const content = document.getElementById('repr-content');
-  if (content.style.display === 'none') {
-    content.style.display = 'block';
+  if (content.style.maxHeight === '0px') {
+    content.style.maxHeight = '100vh';
   } else {
-    content.style.display = 'none';
+    content.style.maxHeight = '0px';
   }
 }
 
 function toggleCalendarPanel() {
   const header = document.getElementById('dlCalendarHeader');
   const grid = document.getElementById('dlCalendarGrid');
-  const isHidden = header.style.display === 'none';
-  header.style.display = isHidden ? 'grid' : 'none';
-  grid.style.display = isHidden ? 'flex' : 'none';
+  const wrap = document.getElementById('dlCalendarWrap');
+  const stats = document.getElementById('dlCalStats');
+  
+  // Verificar si está minimizado (max-height pequeño)
+  const isMinimized = grid.style.maxHeight === '0px';
+  
+  if (isMinimized) {
+    // Maximizar
+    header.style.maxHeight = '30px';
+    grid.style.maxHeight = '110px';
+    wrap.style.maxHeight = 'auto';
+    wrap.style.padding = '10px 14px 6px';
+    if (stats) stats.style.display = 'inline';
+  } else {
+    // Minimizar
+    header.style.maxHeight = '0px';
+    grid.style.maxHeight = '0px';
+    wrap.style.maxHeight = '40px';
+    wrap.style.padding = '6px 14px';
+    if (stats) stats.style.display = 'none';
+  }
 }
 
 function _limpiarCapasRepr() {
