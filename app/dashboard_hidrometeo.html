@@ -1687,6 +1687,25 @@ function fetchAndShowLayer(layer, name, stationsAlreadySet) {
       }
     }
 
+    // Si hay varias features que coinciden por nombre (p.ej. islas + polígono principal),
+    // priorizar geometrías mayores para evitar seleccionar islas pequeñas en lugar
+    // del polígono principal (caso observado en Puno).
+    try {
+      if (typeof turf !== 'undefined' && Array.isArray(features) && features.length > 1) {
+        features = features.slice().sort((a, b) => {
+          try { return (turf.area(b) || 0) - (turf.area(a) || 0); } catch (e) { return 0; }
+        });
+      }
+    } catch (e) { /* noop */ }
+
+    // DEBUG: listar features coincidentes y sus áreas (útil para casos como Puno)
+    try {
+      if (typeof console !== 'undefined' && typeof turf !== 'undefined' && Array.isArray(features)) {
+        const info = features.map((f,i) => ({i, name: (_getCuencaName && _getCuencaName(f.properties)) || f.properties && (f.properties['NOMBRE']||f.properties['nombre']||f.properties['NAME']||f.properties['name']) || 'nd', area: turf.area(f)}));
+        console.log('fetchAndShowLayer: matched features (sorted by area):', info.slice(0,8));
+      }
+    } catch(e) { /* noop */ }
+
     const geo = { type: 'FeatureCollection', features };
 
     // Estilos
@@ -1986,6 +2005,8 @@ style.textContent = `
 .spinner{display:inline-block;vertical-align:middle;font-size:1rem;line-height:1;animation:rat-run 0.45s steps(1) infinite;margin-right:4px;filter:drop-shadow(0 0 4px rgba(26,143,255,0.6))}
 .spinner::before{content:'🐭'}
 @keyframes rat-run{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(4px) scaleX(1)}50%{transform:translateX(0) scaleX(-1)}75%{transform:translateX(-4px) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
+/* Ocultar control Hillshade (diagnóstico/UX) */
+#hillshadeControl, #hillshadeToggle, .leaflet-control-hillshade { display: none !important; }
 `;
 document.head.appendChild(style);
 </script>

@@ -102,7 +102,7 @@ def _find_data_dir():
 def index():
     import io as _io
     # Leer el HTML e inyectar el contenido directamente (evita cache del browser)
-    p = pathlib.Path(__file__).parent / 'dashboard_hidrometeo.html'
+    p = Path(__file__).parent / 'dashboard_hidrometeo.html'
     content = p.read_text(encoding='utf-8')
     resp = app.response_class(content, mimetype='text/html')
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -349,34 +349,53 @@ def api_debug_scraper():
 @app.route('/api/stations')
 def api_stations():
     use_local = request.args.get('use_local', 'true').lower() == 'true'
-    # Prefer reading local maestra directly (ensures coordinates present).
     base = _find_data_dir()
-    # Support two possible local master files; prefer the new Estaciones_Meteorológicas_Peru.xlsx if present
-    maestra_candidates = [
-        base / 'Estaciones_Meteorológicas_Peru.xlsx',
-        base / 'Maestra_de_estaciones_Senamhi.xlsx'
-    ]
     df = None
+    
     if use_local:
-        for cand in maestra_candidates:
-            if cand.exists():
-                try:
-                    df = pd.read_excel(cand)
-                    print(f"api_stations: cargada maestra local: {cand}")
-                    break
-                except Exception as e:
-                    print(f"api_stations: fallo leyendo {cand}: {e}")
-                    df = None
-                    continue
+        # PRIORIDAD 1: stations_hist_portal.csv (tiene 30 estaciones de Puno + coordenadas validadas)
+        hist_csv = base / 'stations_hist_portal.csv'
+        if hist_csv.exists():
+            try:
+                df = pd.read_csv(hist_csv)
+                # Renormalizar columnas para compatibilidad
+                if 'lat' not in df.columns and 'latitud' in df.columns.str.lower().values:
+                    for c in df.columns:
+                        if str(c).lower() == 'latitud':
+                            df = df.rename(columns={c: 'lat'})
+                        elif str(c).lower() == 'longitud':
+                            df = df.rename(columns={c: 'lon'})
+                print(f"api_stations: cargada desde CSV histórico: {hist_csv.name} ({len(df)} records)")
+            except Exception as e:
+                print(f"api_stations: fallo leyendo CSV histórico: {e}")
+                df = None
 
-        # Prefer using the scraper's loader to ensure normalization (handles DMS, headers, etc.)
-        if use_local:
+        # PRIORIDAD 2: Usar módulo scraper si está disponible
+        if df is None and use_local:
             try:
                 mod = scraper or _load_scraper_module()
                 if mod and hasattr(mod, 'get_stations'):
                     df = mod.get_stations(use_local=True)
+                    print(f"api_stations: cargada vía scraper.get_stations()")
             except Exception:
                 df = None
+
+        # PRIORIDAD 3: Maestra Excel con fallbacks
+        if df is None:
+            maestra_candidates = [
+                base / 'Maestra_de_estaciones_Senamhi.xlsx',
+                base / 'Estaciones_Meteorológicas_Peru.xlsx'
+            ]
+            for cand in maestra_candidates:
+                if cand.exists():
+                    try:
+                        df = pd.read_excel(cand)
+                        print(f"api_stations: cargada maestra local: {cand}")
+                        break
+                    except Exception as e:
+                        print(f"api_stations: fallo leyendo {cand}: {e}")
+                        df = None
+                        continue
             # fallback: try direct read of known files (robust to headerless files)
             if df is None:
                 maestra_candidates = [
@@ -727,6 +746,30 @@ def _saved_file_has_data(path):
 
 # Caché en memoria para los GeoJSON completos (se leen del disco solo una vez)
 _geojson_cache = {}  # layer_key -> json_string
+
+def _prewarm_geojson_cache():
+    """Precarga las capas GeoJSON en memoria al arrancar el servidor."""
+    import time as _t
+    _t.sleep(2)  # Esperar que Flask termine de inicializar
+    base = _find_data_dir()
+    layers = [
+        ('departamentos', base / 'DEPARTAMENTOS' / 'INEI_LIMITE_DEPARTAMENTAL_GEOGPSPERU_JUANSUYO_931381206.shp'),
+        ('cuencas',       base / 'CUENCAS' / 'UH.shp'),
+        ('sectores',      base / 'SECTOR_CLIMATICO' / 'SECTORES.shp'),
+    ]
+    for key, shp_path in layers:
+        if key in _geojson_cache:
+            continue
+        try:
+            shp = shp_path if shp_path.exists() else next(iter(shp_path.parent.glob('*.shp')), None)
+            if shp and shp.exists():
+                geo = shapefile_to_geojson(shp, filter_name=None)
+                _geojson_cache[key] = json.dumps(_clean_for_json(geo), ensure_ascii=False)
+                print(f'[prewarm] {key} OK')
+        except Exception as e:
+            print(f'[prewarm] {key} error: {e}')
+
+threading.Thread(target=_prewarm_geojson_cache, daemon=True).start()
 
 @app.route('/api/geojson')
 def api_geojson():
