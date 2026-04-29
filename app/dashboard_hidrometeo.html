@@ -603,18 +603,10 @@ function selectItem(el, name, type, peers) {
   selectedAreaType = type;
   // Mostrar la capa correspondiente en el mapa si existe
   if (type === 'dept') {
-    const normD = (x) => { try { return String(x||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().trim(); } catch(e){ return String(x||'').toLowerCase().trim(); } };
-    // Filtrar estaciones por atributo dept — NO usar fetchAndShowLayer para dept
-    // (fetchAndShowLayer es async y puede sobreescribir CURRENT_VISIBLE_STATIONS)
-    const deptResult = STATIONS_POOL.filter(s => s && s.dept && normD(s.dept) === normD(name));
-    CURRENT_VISIBLE_STATIONS = deptResult;
-    if (typeof plotStationsOnMap === 'function') plotStationsOnMap(deptResult);
-    try { const tb = document.getElementById('tableBody'); if(tb) tb.innerHTML = _buildTableRows(deptResult); } catch(e){}
-    try { updateEstCountBadge(); } catch(e){}
-    try { document.getElementById('deptSublist').innerHTML = ''; } catch(e){}
-    // NO llamar fetchAndShowLayer para dept — el polígono async sobreescribe las estaciones
+    // Mostrar polígono del departamento + estaciones (igual que cuencas)
+    if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('departamentos', name);
   } else if (type === 'cuenca') {
-    // Mostrar poligono de la cuenca en el mapa (con zoom al bbox)
+    // Mostrar polígono de la cuenca en el mapa (con zoom al bbox)
     // renderTable se llama dentro de fetchAndShowLayer al terminar el fetch
     if (typeof fetchAndShowLayer === 'function') fetchAndShowLayer('cuencas', name);
   } else if (type === 'zona') {
