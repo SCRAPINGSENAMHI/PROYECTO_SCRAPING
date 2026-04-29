@@ -375,28 +375,6 @@ html,body{min-height:100vh;font-family:'Inter',sans-serif;
     <!-- MAPA INTERACTIVO -->
     <div style="position:relative">
       <div id="stnMap"></div>
-      <!-- Control Hillshade -->
-      <div id="hillshadeControl" style="display:none !important; position:absolute;bottom:10px;left:10px;z-index:999;background:rgba(6,15,10,0.88);border:1px solid rgba(95,207,141,0.3);border-radius:10px;padding:8px 12px;font-family:'Inter',sans-serif;font-size:0.72rem;color:#a0bfaa;min-width:160px;backdrop-filter:blur(6px)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-          <span style="font-weight:700;color:#5fcf8d;letter-spacing:0.05em;text-transform:uppercase;font-size:0.65rem">Hillshade</span>
-          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-            <input type="checkbox" id="hillshadeToggle" checked onchange="toggleHillshade(this.checked)" style="accent-color:#5fcf8d;cursor:pointer">
-            <span style="font-size:0.68rem;color:#6b8aaa">Visible</span>
-          </label>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-          <span style="width:52px;color:#6b8aaa">Gamma</span>
-          <input type="range" id="hillGamma" min="0.1" max="2.0" step="0.05" value="0.6"
-            oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-          <span id="hillGammaVal" style="width:28px;text-align:right;color:#e2f0e8">0.6</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="width:52px;color:#6b8aaa">Opacidad</span>
-          <input type="range" id="hillOpacity" min="0" max="100" step="5" value="70"
-            oninput="updateHillshade()" style="flex:1;accent-color:#5fcf8d;cursor:pointer">
-          <span id="hillOpacityVal" style="width:28px;text-align:right;color:#e2f0e8">70%</span>
-        </div>
-      </div>
     </div>
 
     <!-- ESTACIÓN SELECCIONADA -->
@@ -695,41 +673,9 @@ function initMap() {
     maxZoom: 18
   }).addTo(map);
 
-  // ── HILLSHADE sobre el satélite (blend multiply) ──
-  map.createPane('hillshadePane');
-  const hillPaneEl = map.getPane('hillshadePane');
-  hillPaneEl.style.zIndex       = 300;
-  hillPaneEl.style.mixBlendMode = 'multiply';
-  hillPaneEl.style.opacity      = '0.7';
-  hillPaneEl.style.pointerEvents = 'none';
-
-  window._hillLayer = L.tileLayer('/api/hillshade/{z}/{x}/{y}.png?gamma=0.5&opacity=255', {
-    opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane'
-  }).addTo(map);
-
   renderMapMarkers();
   buildDeptChips();
   loadDeptGeo();
-}
-
-function updateHillshade() {
-  const gamma   = parseFloat(document.getElementById('hillGamma').value);
-  const opacity = parseFloat(document.getElementById('hillOpacity').value) / 100;
-  document.getElementById('hillGammaVal').textContent   = gamma.toFixed(2);
-  document.getElementById('hillOpacityVal').textContent = Math.round(opacity*100) + '%';
-  const pane = map && map.getPane('hillshadePane');
-  if (pane) pane.style.opacity = opacity;
-  if (!window._hillLayer || !map) return;
-  map.removeLayer(window._hillLayer);
-  window._hillLayer = L.tileLayer(
-    `/api/hillshade/{z}/{x}/{y}.png?gamma=${gamma}&opacity=255`,
-    { opacity: 1, tileSize: 256, minZoom: 3, maxZoom: 18, pane: 'hillshadePane' }
-  ).addTo(map);
-}
-
-function toggleHillshade(visible) {
-  const pane = map && map.getPane('hillshadePane');
-  if (pane) pane.style.display = visible ? '' : 'none';
 }
 
 function renderMapMarkers() {

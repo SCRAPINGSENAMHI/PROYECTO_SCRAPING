@@ -2005,8 +2005,6 @@ style.textContent = `
 .spinner{display:inline-block;vertical-align:middle;font-size:1rem;line-height:1;animation:rat-run 0.45s steps(1) infinite;margin-right:4px;filter:drop-shadow(0 0 4px rgba(26,143,255,0.6))}
 .spinner::before{content:'🐭'}
 @keyframes rat-run{0%{transform:translateX(0) scaleX(1)}25%{transform:translateX(4px) scaleX(1)}50%{transform:translateX(0) scaleX(-1)}75%{transform:translateX(-4px) scaleX(-1)}100%{transform:translateX(0) scaleX(1)}}
-/* Ocultar control Hillshade (diagnóstico/UX) */
-#hillshadeControl, #hillshadeToggle, .leaflet-control-hillshade { display: none !important; }
 `;
 document.head.appendChild(style);
 </script>
